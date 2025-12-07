@@ -60,7 +60,7 @@ model Companion {
   
   @@index([authorId])
   @@index([subject])
-  @@fulltext([name, topic, description])
+  @@index([name])
 }
 
 model SessionHistory {
