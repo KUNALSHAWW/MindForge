@@ -1,0 +1,156 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String      @id @default(cuid())
+  clerkId             String      @unique
+  email               String      @unique
+  name                String?
+  image               String?
+  bio                 String?
+  
+  // Stats
+  level               Int         @default(1)
+  totalXP             Int         @default(0)
+  currentStreak       Int         @default(0)
+  longestStreak       Int         @default(0)
+  totalSessionMinutes Int         @default(0)
+  
+  // Relations
+  companions          Companion[]
+  sessions            SessionHistory[]
+  achievements        Achievement[]
+  documents           RAGDocument[]
+  bookmarks           Bookmark[]
+  
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+  
+  @@index([clerkId])
+}
+
+model Companion {
+  id          String      @id @default(cuid())
+  name        String
+  subject     String
+  topic       String
+  description String      @db.Text
+  duration    Int
+  style       String      // formal, casual, socratic, storytelling
+  voice       String      // male, female
+  
+  // Relations
+  author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId    String
+  
+  sessions    SessionHistory[]
+  bookmarks   Bookmark[]
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@index([authorId])
+  @@index([subject])
+  @@fulltext([name, topic, description])
+}
+
+model SessionHistory {
+  id              String      @id @default(cuid())
+  
+  // Relations
+  companion       Companion   @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  companionId     String
+  
+  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          String
+  
+  // Session Data
+  durationMinutes Int
+  transcript      String      @db.Text
+  xpEarned        Int         @default(0)
+  notes           String?     @db.Text
+  
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  
+  @@index([userId])
+  @@index([companionId])
+  @@index([createdAt])
+}
+
+model Achievement {
+  id          String      @id @default(cuid())
+  
+  title       String
+  description String
+  icon        String
+  
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  
+  unlockedAt  DateTime    @default(now())
+  
+  @@unique([userId, title])
+  @@index([userId])
+}
+
+model Bookmark {
+  id          String      @id @default(cuid())
+  
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  
+  companion   Companion   @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  companionId String
+  
+  createdAt   DateTime    @default(now())
+  
+  @@unique([userId, companionId])
+  @@index([userId])
+  @@index([companionId])
+}
+
+model RAGDocument {
+  id          String      @id @default(cuid())
+  
+  title       String
+  content     String      @db.Text
+  embedding   String      @db.Text // JSON stringified vector
+  subject     String
+  
+  // Relations
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  @@index([userId])
+  @@index([subject])
+}
+
+model LearningPath {
+  id          String      @id @default(cuid())
+  
+  title       String
+  description String      @db.Text
+  subject     String
+  
+  modules     String      @db.Text // JSON stringified modules
+  completed   Int         @default(0)
+  total       Int
+  
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
