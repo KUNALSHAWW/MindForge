@@ -67,7 +67,7 @@ MindForge is a next-generation learning platform that combines voice-powered tut
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/mindforge.git
+git clone https://github.com/KUNALSHAWW/mindforge.git
 cd mindforge
 
 # Install dependencies
