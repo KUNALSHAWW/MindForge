@@ -1,13 +1,14 @@
-import { Navbar } from "@/components/Navbar";
+import { currentUser } from "@clerk/nextjs/server";
 import { ReactNode } from "react";
+import { DashboardLayout as DashboardLayoutComponent } from "@/components/Dashboard";
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default async function DashboardLayout({ children }: { children: ReactNode }) {
+  const user = await currentUser();
+  const userName = user ? `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() : null;
+
   return (
-    <div className="min-h-screen bg-[#0a0a0f]">
-      <Navbar />
-      <main className="pt-20">
-        {children}
-      </main>
-    </div>
+    <DashboardLayoutComponent userName={userName}>
+      {children}
+    </DashboardLayoutComponent>
   );
 }

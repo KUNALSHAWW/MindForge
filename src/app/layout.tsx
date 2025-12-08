@@ -105,16 +105,16 @@ export default function RootLayout({
     <ClerkProvider
       appearance={{
         variables: {
-          colorPrimary: "hsl(250, 100%, 65%)",
-          colorBackground: "hsl(220, 20%, 98%)",
-          borderRadius: "0.75rem",
+          colorPrimary: "hsl(234, 89%, 54%)",
+          colorBackground: "hsl(0, 0%, 100%)",
+          borderRadius: "0.5rem",
         },
         elements: {
           formButtonPrimary:
-            "bg-primary hover:bg-primary-hover text-white shadow-lg",
-          card: "shadow-xl border border-border",
-          headerTitle: "font-display font-bold",
-          headerSubtitle: "text-muted-foreground",
+            "bg-[hsl(234,89%,54%)] hover:bg-[hsl(234,89%,48%)] text-white shadow-sm",
+          card: "shadow-md border border-[hsl(220,13%,91%)]",
+          headerTitle: "font-semibold",
+          headerSubtitle: "text-[hsl(220,9%,46%)]",
         },
       }}
     >
@@ -125,7 +125,7 @@ export default function RootLayout({
         >
           <ThemeProvider
             attribute="class"
-            defaultTheme="dark"
+            defaultTheme="light"
             enableSystem
             disableTransitionOnChange={false}
           >
