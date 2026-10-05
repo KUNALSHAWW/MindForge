@@ -34,6 +34,8 @@ model User {
   flashcards   Flashcard[]
   reviewLogs   ReviewLog[]
   quizzes      Quiz[]
+  ownedClasses Classroom[]      @relation("OwnedClasses")
+  memberships  ClassMember[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -203,4 +205,29 @@ model Quiz {
   createdAt   DateTime  @default(now())
 
   @@index([userId, createdAt])
+}
+
+// A teacher's class; students join with the code and share progress summaries (never conversations)
+model Classroom {
+  id        String        @id @default(cuid())
+  name      String
+  joinCode  String        @unique
+  owner     User          @relation("OwnedClasses", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId   String
+  members   ClassMember[]
+  createdAt DateTime      @default(now())
+
+  @@index([ownerId])
+}
+
+model ClassMember {
+  id          String    @id @default(cuid())
+  classroom   Classroom @relation(fields: [classroomId], references: [id], onDelete: Cascade)
+  classroomId String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  joinedAt    DateTime  @default(now())
+
+  @@unique([classroomId, userId])
+  @@index([userId])
 }

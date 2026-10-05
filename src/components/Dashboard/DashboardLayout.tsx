@@ -18,6 +18,7 @@ import {
   FileText,
   Trophy,
   ListChecks,
+  School,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -35,6 +36,7 @@ const mainLinks: SidebarLink[] = [
   { href: "/forge", label: "Knowledge Forge", icon: FileText },
   { href: "/journey", label: "Learning Journey", icon: Compass },
   { href: "/achievements", label: "Achievements", icon: Trophy },
+  { href: "/classes", label: "Classes", icon: School },
 ];
 
 const secondaryLinks: SidebarLink[] = [
