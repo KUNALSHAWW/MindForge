@@ -33,6 +33,7 @@ model User {
   bookmarks    Bookmark[]
   flashcards   Flashcard[]
   reviewLogs   ReviewLog[]
+  quizzes      Quiz[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -188,4 +189,18 @@ model ReviewLog {
 
   @@index([userId, reviewedAt])
   @@index([cardId])
+}
+
+// A quiz generated from the learner's notes; questions keep answers and sources server-side
+model Quiz {
+  id          String    @id @default(cuid())
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  subject     String
+  questions   Json // [{ question, answer, kind, source, response?, score?, feedback? }]
+  score       Float?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }

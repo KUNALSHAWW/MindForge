@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FileText, Trash2, Upload, X } from "lucide-react";
@@ -156,6 +157,9 @@ export default function ForgeClient({ documents, demo, semantic }: { documents: 
                   {doc.embedded ? " · embedded" : ""} · {new Date(doc.createdAt).toLocaleDateString()}
                 </p>
               </div>
+              <Link href={`/quiz?subject=${doc.subject}`} className="px-3 py-1.5 rounded-lg text-sm text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.06)]">
+                Quiz me
+              </Link>
               <button onClick={() => remove(doc)} aria-label={`Delete ${doc.title}`} className="p-2 rounded-lg text-[hsl(var(--foreground-muted))] hover:text-red-500 hover:bg-red-500/10">
                 <Trash2 className="w-4 h-4" />
               </button>

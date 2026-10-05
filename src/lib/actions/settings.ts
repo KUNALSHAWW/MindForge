@@ -89,6 +89,7 @@ export async function exportUserData(): Promise<Result<object>> {
         bookmarks: { include: { companion: { select: { name: true } } } },
         documents: { select: { title: true, subject: true, content: true, createdAt: true } },
         flashcards: true,
+        quizzes: { select: { subject: true, questions: true, score: true, completedAt: true } },
         reviewLogs: { select: { cardId: true, rating: true, reviewedAt: true }, orderBy: { reviewedAt: "asc" } },
       },
     });
@@ -112,6 +113,7 @@ export async function exportUserData(): Promise<Result<object>> {
         notes: user.documents,
         flashcards: user.flashcards.map(({ front, back, subject, stability, difficulty, reps, lapses, due, lastReview }) => ({ front, back, subject, stability, difficulty, reps, lapses, due, lastReview })),
         reviewLog: user.reviewLogs,
+        quizzes: user.quizzes,
       },
     };
   } catch (error) {

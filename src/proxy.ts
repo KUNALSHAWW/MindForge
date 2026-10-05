@@ -6,6 +6,7 @@ const isProtectedRoute = createRouteMatcher([
   "/companions(.*)",
   "/journey(.*)",
   "/review(.*)",
+  "/quiz(.*)",
   "/forge(.*)",
   "/achievements(.*)",
   "/settings(.*)",

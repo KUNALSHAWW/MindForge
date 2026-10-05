@@ -5,6 +5,7 @@
 export const XP_PER_MINUTE = 3;
 export const XP_PER_LEVEL = 1000;
 export const XP_PER_REVIEW = 2;
+export const XP_PER_QUIZ_POINT = 5;
 export const MAX_STREAK_MULTIPLIER = 2;
 
 /** XP for a session. The streak passed in must already include today's session. */
