@@ -1,0 +1,37 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# Secrets use `sync: false`, so Render asks for their values when the Blueprint is applied.
+# Without DATABASE_URL the app runs in demo mode; add any Postgres URL (Render, Neon, Supabase) to persist data.
+services:
+  - type: web
+    name: mindforge
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run db:deploy && npm run build
+    startCommand: npm start
+    healthCheckPath: /icon.svg
+    envVars:
+      - key: NODE_VERSION
+        value: "24"
+      - key: NEXT_TELEMETRY_DISABLED
+        value: "1"
+      - key: NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+        sync: false
+      - key: CLERK_SECRET_KEY
+        sync: false
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_URL
+        value: /sign-in
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_URL
+        value: /sign-up
+      - key: NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL
+        value: /dashboard
+      - key: NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL
+        value: /dashboard
+      - key: DATABASE_URL
+        sync: false
+      - key: HUGGINGFACE_API_KEY
+        sync: false
+      - key: UPSTASH_REDIS_REST_URL
+        sync: false
+      - key: UPSTASH_REDIS_REST_TOKEN
+        sync: false

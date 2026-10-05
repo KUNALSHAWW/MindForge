@@ -145,7 +145,10 @@ CI runs lint, type-check, tests and a production build on every push.
 
 ### Deploying
 
-Import the repository in Vercel, add the environment variables and deploy. Set the Upstash variables in production so rate limits hold across serverless instances.
+- **Render:** the repo includes a [`render.yaml`](render.yaml) Blueprint (free web service, Node 24). Apply it from the Render dashboard and enter the Clerk keys when prompted. `npm run db:deploy` syncs the schema on every deploy once `DATABASE_URL` is set, and skips it in demo mode.
+- **Vercel:** import the repository and add the same environment variables.
+
+Set the Upstash variables in production so rate limits hold across instances.
 
 ---
 
