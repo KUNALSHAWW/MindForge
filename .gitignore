@@ -50,3 +50,6 @@ prisma/migrations/
 # TypeScript
 *.tsbuildinfo
 next-env.d.ts
+
+# evaluation data cache
+.cache/

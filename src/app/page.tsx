@@ -138,7 +138,7 @@ export default function HomePage() {
 
             {/* What is inside */}
             <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-[hsl(var(--foreground-muted))]">
-              {["Streaming LLM tutors", "Cited answers from your notes", "Spaced repetition", "Voice mode", "Demo mode without setup"].map((item) => (
+              {["Streaming LLM tutors", "Cited answers from your PDFs and notes", "Personalised spaced repetition", "Quizzes graded against your notes", "Voice mode", "Teacher classrooms"].map((item) => (
                 <span key={item} className="inline-flex items-center gap-1.5">
                   <CheckCircle className="w-4 h-4 text-[hsl(var(--success))]" />
                   {item}
@@ -208,7 +208,7 @@ export default function HomePage() {
                 icon: Target,
                 title: "Spaced Repetition",
                 description:
-                  "Each session is summarised into flashcards scheduled with FSRS-4.5, the algorithm Anki adopted, so reviews land when they matter.",
+                  "Sessions and missed quiz questions become flashcards scheduled with FSRS-4.5, then personalised to how you forget once you have enough reviews.",
                 color: "bg-cyan-50 text-cyan-600 dark:bg-cyan-950 dark:text-cyan-400",
               },
             ].map((feature) => (

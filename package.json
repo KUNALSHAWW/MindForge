@@ -18,7 +18,8 @@
     "db:generate": "npx prisma generate",
     "db:studio": "npx prisma studio",
     "postinstall": "prisma generate",
-    "test": "node --test \"src/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\"",
+    "eval": "node scripts/eval.ts"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.39.7",
