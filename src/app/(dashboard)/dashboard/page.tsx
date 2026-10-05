@@ -7,12 +7,12 @@ import {
   Clock,
   Flame,
   Trophy,
-  TrendingUp,
   ArrowRight,
   Zap,
+  Brain,
 } from "lucide-react";
 
-import { getDashboardData } from "@/lib/actions/user";
+import { getDashboardData, type AchievementData, type CompanionData, type SessionData, type UserStats } from "@/lib/actions/user";
 import {
   StatCard,
   StatCardSkeleton,
@@ -27,67 +27,58 @@ import {
 } from "@/components/Dashboard";
 
 export const metadata = {
-  title: "Dashboard | MindForge",
+  title: "Dashboard",
   description: "Your personalized learning dashboard with progress tracking",
 };
 
-// Placeholder data for when DB is empty
-const placeholderStats = {
+const placeholderStats: UserStats = {
   level: 1,
   totalXP: 0,
   currentStreak: 0,
   longestStreak: 0,
   totalSessionMinutes: 0,
+  totalSessions: 0,
   xpToNextLevel: 1000,
   levelProgress: 0,
+  dueCards: 0,
 };
 
 async function DashboardContent() {
-  const { data, error } = await getDashboardData();
-
-  if (error || !data) {
-    // Show placeholder content for new users
-    return (
-      <DashboardUI
-        userName="Learner"
-        stats={placeholderStats}
-        sessions={[]}
-        companions={[]}
-        achievements={[]}
-      />
-    );
+  const { data } = await getDashboardData();
+  if (!data) {
+    return <DashboardUI userName="Learner" stats={placeholderStats} sessions={[]} companions={[]} achievements={[]} demo={false} />;
   }
-
   return (
     <DashboardUI
-      userName={data.user.name?.split(" ")[0] || "Learner"}
+      userName={data.userName}
       stats={data.stats}
       sessions={data.recentSessions}
       companions={data.companions}
       achievements={data.achievements}
+      demo={data.demo}
     />
   );
 }
 
 interface DashboardUIProps {
   userName: string;
-  stats: typeof placeholderStats;
-  sessions: Awaited<ReturnType<typeof getDashboardData>>["data"] extends null
-    ? never
-    : NonNullable<Awaited<ReturnType<typeof getDashboardData>>["data"]>["recentSessions"];
-  companions: Awaited<ReturnType<typeof getDashboardData>>["data"] extends null
-    ? never
-    : NonNullable<Awaited<ReturnType<typeof getDashboardData>>["data"]>["companions"];
-  achievements: Awaited<ReturnType<typeof getDashboardData>>["data"] extends null
-    ? never
-    : NonNullable<Awaited<ReturnType<typeof getDashboardData>>["data"]>["achievements"];
+  stats: UserStats;
+  sessions: SessionData[];
+  companions: CompanionData[];
+  achievements: AchievementData[];
+  demo: boolean;
 }
 
-function DashboardUI({ userName, stats, sessions, companions, achievements }: DashboardUIProps) {
+function DashboardUI({ userName, stats, sessions, companions, achievements, demo }: DashboardUIProps) {
   const totalHours = Math.round((stats.totalSessionMinutes / 60) * 10) / 10;
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
+      {demo && (
+        <div className="p-3 rounded-lg border border-[hsl(var(--warning)/0.3)] bg-[hsl(var(--warning)/0.08)] text-sm text-[hsl(var(--foreground))]">
+          <strong>Demo mode:</strong> no database is connected, so you are seeing sample progress. Set <code>DATABASE_URL</code> and run <code>npm run db:push</code> to save real sessions, notes and flashcards.
+        </div>
+      )}
       {/* Welcome Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -95,7 +86,9 @@ function DashboardUI({ userName, stats, sessions, companions, achievements }: Da
             Welcome back, {userName}
           </h1>
           <p className="text-sm text-[hsl(var(--foreground-muted))] mt-1">
-            Track your learning progress and continue your journey
+            {stats.dueCards > 0
+              ? `${stats.dueCards} flashcard${stats.dueCards === 1 ? "" : "s"} ready for review. Recalling them now locks them into long-term memory.`
+              : "Track your learning progress and continue your journey"}
           </p>
         </div>
         <Link
@@ -132,7 +125,7 @@ function DashboardUI({ userName, stats, sessions, companions, achievements }: Da
         />
         <StatCard
           label="Sessions"
-          value={sessions.length > 0 ? sessions.length : "0"}
+          value={stats.totalSessions}
           subValue="Completed sessions"
           icon={Trophy}
           variant="purple"
@@ -253,20 +246,22 @@ function DashboardUI({ userName, stats, sessions, companions, achievements }: Da
             )}
           </Card>
 
-          {/* Pro Tip */}
+          {/* Review queue */}
           <Card className="bg-[hsl(var(--primary)/0.05)] border-[hsl(var(--primary)/0.2)]">
             <div className="flex gap-3">
               <div className="w-8 h-8 rounded-lg bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0">
-                <TrendingUp className="w-4 h-4 text-[hsl(var(--primary))]" />
+                <Brain className="w-4 h-4 text-[hsl(var(--primary))]" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h4 className="text-sm font-medium text-[hsl(var(--foreground))]">
-                  Pro Tip
+                  {stats.dueCards > 0 ? `${stats.dueCards} cards due` : "Review queue is clear"}
                 </h4>
                 <p className="text-xs text-[hsl(var(--foreground-muted))] mt-1 leading-relaxed">
-                  Maintain your streak by completing at least one learning session
-                  daily. Consistency is key to mastering new skills!
+                  Every session becomes flashcards scheduled with FSRS, so you review each idea right before you would forget it.
                 </p>
+                <Link href="/review" className="text-xs font-medium text-[hsl(var(--primary))] hover:underline inline-flex items-center gap-1 mt-2">
+                  {stats.dueCards > 0 ? "Start review" : "Open review"} <ArrowRight className="w-3 h-3" />
+                </Link>
               </div>
             </div>
           </Card>

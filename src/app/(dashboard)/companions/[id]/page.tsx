@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { getCompanion } from "@/lib/actions/companion";
+import { getProfileAndSettings } from "@/lib/actions/settings";
+import { DEFAULT_SETTINGS } from "@/lib/validators";
 import CompanionSession from "./CompanionSession";
 
 interface Props {
@@ -10,15 +12,8 @@ interface Props {
 export async function generateMetadata({ params }: Props) {
   const { id } = await params;
   const result = await getCompanion(id);
-  
-  if (!result.success || !result.data) {
-    return { title: "Companion Not Found | MindForge" };
-  }
-
-  return {
-    title: `${result.data.name} | MindForge`,
-    description: result.data.description,
-  };
+  if (!result.success) return { title: "Companion Not Found" };
+  return { title: result.data.name, description: result.data.description };
 }
 
 function SessionSkeleton() {
@@ -40,18 +35,14 @@ function SessionSkeleton() {
 }
 
 async function CompanionContent({ id }: { id: string }) {
-  const result = await getCompanion(id);
-
-  if (!result.success || !result.data) {
-    notFound();
-  }
-
-  return <CompanionSession companion={result.data} />;
+  const [result, prefs] = await Promise.all([getCompanion(id), getProfileAndSettings()]);
+  if (!result.success) notFound();
+  const learning = prefs.success ? prefs.data.settings.learning : DEFAULT_SETTINGS.learning;
+  return <CompanionSession companion={result.data} autoSpeak={learning.autoSpeak} voiceEnabled={learning.voiceEnabled} />;
 }
 
 export default async function CompanionPage({ params }: Props) {
   const { id } = await params;
-
   return (
     <Suspense fallback={<SessionSkeleton />}>
       <CompanionContent id={id} />

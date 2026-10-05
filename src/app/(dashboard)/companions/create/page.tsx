@@ -5,21 +5,9 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, Sparkles, Mic, BookOpen, Clock, User2 } from "lucide-react";
 import { createCompanion } from "@/lib/actions/companion";
+import { SUBJECTS, type Subject, type TeachingStyle } from "@/lib/subjects";
+import { toast } from "sonner";
 
-const SUBJECTS = [
-  { value: "maths", label: "Mathematics", icon: "📐" },
-  { value: "science", label: "Science", icon: "🔬" },
-  { value: "physics", label: "Physics", icon: "⚛️" },
-  { value: "chemistry", label: "Chemistry", icon: "🧪" },
-  { value: "biology", label: "Biology", icon: "🧬" },
-  { value: "coding", label: "Programming", icon: "💻" },
-  { value: "history", label: "History", icon: "📜" },
-  { value: "language", label: "Language", icon: "🗣️" },
-  { value: "economics", label: "Economics", icon: "📊" },
-  { value: "philosophy", label: "Philosophy", icon: "🤔" },
-  { value: "art", label: "Art & Design", icon: "🎨" },
-  { value: "music", label: "Music", icon: "🎵" },
-];
 
 const STYLES = [
   { value: "formal", label: "Formal", description: "Professional, structured approach", icon: "👔" },
@@ -42,11 +30,11 @@ export default function CreateCompanionPage() {
   
   const [formData, setFormData] = useState({
     name: "",
-    subject: "",
+    subject: "" as Subject | "",
     topic: "",
     description: "",
     duration: 30,
-    style: "casual" as "formal" | "casual" | "socratic" | "storytelling",
+    style: "casual" as TeachingStyle,
     voice: "female" as "male" | "female",
   });
 
@@ -58,7 +46,8 @@ export default function CreateCompanionPage() {
       setError("Please enter a name for your companion");
       return;
     }
-    if (!formData.subject) {
+    const subject = formData.subject;
+    if (!subject) {
       setError("Please select a subject");
       return;
     }
@@ -74,12 +63,12 @@ export default function CreateCompanionPage() {
     setIsSubmitting(true);
 
     try {
-      const result = await createCompanion(formData);
-      
-      if (result.success && result.data) {
+      const result = await createCompanion({ ...formData, subject });
+      if (result.success) {
+        for (const a of result.newAchievements ?? []) toast.success(`Achievement unlocked: ${a}`);
         router.push(`/companions/${result.data.id}`);
       } else {
-        setError(result.error || "Failed to create companion");
+        setError(result.error);
       }
     } catch (err) {
       setError("An unexpected error occurred");

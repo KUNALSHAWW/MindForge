@@ -1,9 +1,9 @@
 import { Suspense } from "react";
-import { Trophy, Lock, CheckCircle2, Target, Flame, Zap, Clock } from "lucide-react";
-import { getAchievements, getAchievementProgress } from "@/lib/actions/achievement";
+import { Trophy, Lock, CheckCircle2, Target, Flame, Zap, Clock, Brain } from "lucide-react";
+import { getAchievements } from "@/lib/actions/achievement";
 
 export const metadata = {
-  title: "Achievements | MindForge",
+  title: "Achievements",
   description: "Track your learning achievements and milestones",
 };
 
@@ -26,12 +26,9 @@ function AchievementsSkeleton() {
 }
 
 async function AchievementsContent() {
-  const [achievementsResult, progressResult] = await Promise.all([
-    getAchievements(),
-    getAchievementProgress(),
-  ]);
+  const achievementsResult = await getAchievements();
 
-  if (!achievementsResult.success || !achievementsResult.data) {
+  if (!achievementsResult.success) {
     return (
       <div className="text-center py-12">
         <p className="text-[hsl(var(--foreground-muted))]">
@@ -41,8 +38,7 @@ async function AchievementsContent() {
     );
   }
 
-  const { all, stats } = achievementsResult.data;
-  const progress = progressResult.data;
+  const { all, stats, progress, demo } = achievementsResult.data;
 
   // Group achievements by category
   const categories = {
@@ -51,6 +47,7 @@ async function AchievementsContent() {
     xp: all.filter(a => a.category === "xp"),
     time: all.filter(a => a.category === "time"),
     special: all.filter(a => a.category === "special"),
+    memory: all.filter(a => a.category === "memory"),
   };
 
   const categoryIcons = {
@@ -59,6 +56,7 @@ async function AchievementsContent() {
     xp: Zap,
     time: Clock,
     special: Trophy,
+    memory: Brain,
   };
 
   const categoryLabels = {
@@ -67,10 +65,14 @@ async function AchievementsContent() {
     xp: "Experience",
     time: "Time",
     special: "Special",
+    memory: "Memory",
   };
 
   return (
     <div className="space-y-8">
+      {demo && (
+        <p className="text-sm text-[hsl(var(--foreground-muted))]">Demo mode: showing sample progress. Connect a database to earn achievements for real.</p>
+      )}
       {/* Stats Overview */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="card p-4">
@@ -120,41 +122,15 @@ async function AchievementsContent() {
       </div>
 
       {/* Progress Bars */}
-      {progress && (
-        <div className="card p-6">
-          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))] mb-4">Next Milestones</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <ProgressBar
-              label="Sessions"
-              current={progress.sessions.current}
-              target={progress.sessions.next}
-              icon={<Target className="w-4 h-4" />}
-              color="primary"
-            />
-            <ProgressBar
-              label="Streak"
-              current={progress.streak.current}
-              target={progress.streak.next}
-              icon={<Flame className="w-4 h-4" />}
-              color="orange"
-            />
-            <ProgressBar
-              label="XP"
-              current={progress.xp.current}
-              target={progress.xp.next}
-              icon={<Zap className="w-4 h-4" />}
-              color="yellow"
-            />
-            <ProgressBar
-              label="Minutes"
-              current={progress.time.current}
-              target={progress.time.next}
-              icon={<Clock className="w-4 h-4" />}
-              color="blue"
-            />
-          </div>
+      <div className="card p-6">
+        <h2 className="text-lg font-semibold text-[hsl(var(--foreground))] mb-4">Next Milestones</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {MILESTONES.map(({ metric, label, icon: Icon, color }) => {
+            const p = progress[metric];
+            return p ? <ProgressBar key={metric} label={label} current={p.current} target={p.next} icon={<Icon className="w-4 h-4" />} color={color} /> : null;
+          })}
         </div>
-      )}
+      </div>
 
       {/* Achievements by Category */}
       {(Object.keys(categories) as Array<keyof typeof categories>).map((category) => {
@@ -204,9 +180,14 @@ async function AchievementsContent() {
                       </p>
                     )}
                     {!achievement.isUnlocked && (
-                      <div className="flex items-center gap-1 text-xs text-[hsl(var(--foreground-subtle))]">
-                        <Lock className="w-3 h-3" />
-                        Locked
+                      <div className="w-full">
+                        <div className="flex items-center justify-center gap-1 text-xs text-[hsl(var(--foreground-subtle))] mb-1">
+                          <Lock className="w-3 h-3" />
+                          {Math.min(achievement.current, achievement.requirement).toLocaleString()} / {achievement.requirement.toLocaleString()}
+                        </div>
+                        <div className="h-1 rounded-full bg-[hsl(var(--muted))] overflow-hidden">
+                          <div className="h-full bg-[hsl(var(--primary)/0.6)]" style={{ width: `${Math.min(100, (achievement.current / achievement.requirement) * 100)}%` }} />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -220,6 +201,13 @@ async function AchievementsContent() {
   );
 }
 
+const MILESTONES = [
+  { metric: "sessions", label: "Sessions", icon: Target, color: "primary" },
+  { metric: "streak", label: "Best streak (days)", icon: Flame, color: "orange" },
+  { metric: "xp", label: "XP", icon: Zap, color: "yellow" },
+  { metric: "totalMinutes", label: "Minutes learned", icon: Clock, color: "blue" },
+] as const;
+
 function ProgressBar({ 
   label, 
   current, 
@@ -229,11 +217,11 @@ function ProgressBar({
 }: { 
   label: string; 
   current: number; 
-  target: number;
+  target: number | null;
   icon: React.ReactNode;
   color: "primary" | "orange" | "yellow" | "blue";
 }) {
-  const percentage = Math.min(100, (current / target) * 100);
+  const percentage = target ? Math.min(100, (current / target) * 100) : 100;
   
   const colorClasses = {
     primary: "bg-[hsl(var(--primary))]",
@@ -250,7 +238,7 @@ function ProgressBar({
           {label}
         </div>
         <span className="text-sm font-medium text-[hsl(var(--foreground))]">
-          {current.toLocaleString()} / {target.toLocaleString()}
+          {target ? `${current.toLocaleString()} / ${target.toLocaleString()}` : `${current.toLocaleString()} · all done`}
         </span>
       </div>
       <div className="h-2 bg-[hsl(var(--muted))] rounded-full overflow-hidden">

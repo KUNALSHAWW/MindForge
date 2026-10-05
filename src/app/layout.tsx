@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Inter, Space_Grotesk, JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/providers/theme-provider";
-import { QueryProvider } from "@/components/providers/query-provider";
 import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
@@ -31,7 +30,7 @@ export const metadata: Metadata = {
     template: "%s | MindForge",
   },
   description:
-    "Forge your knowledge with voice-powered learning companions. An intelligent learning platform featuring personalized tutors, RAG-enhanced knowledge retrieval, and immersive voice interactions.",
+    "AI tutors that remember for you: streaming voice-enabled tutors with teaching styles, answers grounded in your own notes with citations, and FSRS spaced repetition that turns every session into long-term memory.",
   keywords: [
     "learning platform",
     "voice learning",
@@ -39,6 +38,9 @@ export const metadata: Metadata = {
     "education",
     "personalized learning",
     "knowledge retrieval",
+    "spaced repetition",
+    "FSRS",
+    "RAG",
   ],
   authors: [{ name: "Kunal Shaw" }],
   creator: "Kunal Shaw",
@@ -49,22 +51,13 @@ export const metadata: Metadata = {
     siteName: "MindForge",
     title: "MindForge - Forge Your Knowledge",
     description:
-      "Forge your knowledge with voice-powered learning companions.",
-    images: [
-      {
-        url: "/images/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "MindForge - Voice-powered learning platform",
-      },
-    ],
+      "AI tutors that turn every session into long-term memory.",
   },
   twitter: {
     card: "summary_large_image",
     title: "MindForge - Forge Your Knowledge",
     description:
-      "Forge your knowledge with voice-powered learning companions.",
-    images: ["/images/og-image.png"],
+      "AI tutors that turn every session into long-term memory.",
     creator: "@kunalshaw",
   },
   robots: {
@@ -78,12 +71,6 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
-  icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon-16x16.png",
-    apple: "/apple-touch-icon.png",
-  },
-  manifest: "/manifest.json",
 };
 
 export const viewport: Viewport = {
@@ -129,10 +116,8 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange={false}
           >
-            <QueryProvider>
-              {children}
-              <Toaster position="bottom-right" richColors closeButton />
-            </QueryProvider>
+            {children}
+            <Toaster position="bottom-right" richColors closeButton />
           </ThemeProvider>
         </body>
       </html>

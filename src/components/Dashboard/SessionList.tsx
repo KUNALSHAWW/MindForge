@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Clock, Sparkles, ArrowRight } from "lucide-react";
 import type { SessionData } from "@/lib/actions/user";
+import { subjectIcon, subjectLabel } from "@/lib/subjects";
 
 interface SessionListProps {
   sessions: SessionData[];
@@ -51,7 +52,7 @@ export function SessionList({ sessions }: SessionListProps) {
           <div className="flex items-center gap-4 min-w-0">
             <div className="w-10 h-10 rounded-lg bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0">
               <span className="text-lg">
-                {getSubjectEmoji(session.subject)}
+                {subjectIcon(session.subject)}
               </span>
             </div>
             <div className="min-w-0">
@@ -59,7 +60,7 @@ export function SessionList({ sessions }: SessionListProps) {
                 {session.companionName}
               </h4>
               <p className="text-xs text-[hsl(var(--foreground-muted))] truncate">
-                {session.subject} • {session.topic}
+                {subjectLabel(session.subject)} • {session.topic}
               </p>
             </div>
           </div>
@@ -82,29 +83,6 @@ export function SessionList({ sessions }: SessionListProps) {
       ))}
     </div>
   );
-}
-
-function getSubjectEmoji(subject: string): string {
-  const subjectEmojis: Record<string, string> = {
-    mathematics: "📐",
-    physics: "⚛️",
-    chemistry: "🧪",
-    biology: "🧬",
-    history: "📜",
-    geography: "🌍",
-    literature: "📚",
-    language: "🗣️",
-    programming: "💻",
-    music: "🎵",
-    art: "🎨",
-    default: "📖",
-  };
-
-  const normalizedSubject = subject.toLowerCase();
-  for (const [key, emoji] of Object.entries(subjectEmojis)) {
-    if (normalizedSubject.includes(key)) return emoji;
-  }
-  return subjectEmojis.default;
 }
 
 export function SessionListSkeleton() {

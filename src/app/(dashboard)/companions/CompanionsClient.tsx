@@ -1,82 +1,52 @@
 "use client";
 
-import { useState, useEffect, useTransition, useCallback } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { toast } from "sonner";
 import { BookOpen, Plus, Heart, Clock, MessageSquare, Search } from "lucide-react";
 import { getCompanions, toggleBookmark, type CompanionWithStats } from "@/lib/actions/companion";
+import { SUBJECTS as ALL_SUBJECTS, subjectLabel } from "@/lib/subjects";
 
-const SUBJECTS = [
-  { value: "all", label: "All" },
-  { value: "maths", label: "Maths" },
-  { value: "science", label: "Science" },
-  { value: "physics", label: "Physics" },
-  { value: "chemistry", label: "Chemistry" },
-  { value: "biology", label: "Biology" },
-  { value: "coding", label: "Coding" },
-  { value: "history", label: "History" },
-  { value: "language", label: "Language" },
-  { value: "economics", label: "Economics" },
-];
+const SUBJECTS = [{ value: "all", label: "All" }, ...ALL_SUBJECTS];
 
 export default function CompanionsPageClient() {
+  const searchParams = useSearchParams();
   const [companions, setCompanions] = useState<CompanionWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
-  const [isPending, startTransition] = useTransition();
+  const [search, setSearch] = useState(searchParams.get("q") ?? "");
 
-  const loadCompanions = useCallback(async () => {
-    setIsLoading(true);
-    try {
-      const result = await getCompanions({ 
-        subject: filter === "all" ? undefined : filter,
-        search: search || undefined,
-      });
-      
-      if (result.success && result.data) {
-        setCompanions(result.data);
-      } else {
-        setError(result.error || "Failed to load companions");
-      }
-    } catch (err) {
-      setError("An unexpected error occurred");
-      console.error(err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [filter, search]);
-
+  // Server-side search, debounced so typing doesn't fire a query per keystroke.
   useEffect(() => {
-    loadCompanions();
-  }, [loadCompanions]);
-
-  const handleSearch = () => {
-    startTransition(() => {
-      loadCompanions();
-    });
-  };
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setIsLoading(true);
+      const result = await getCompanions({ subject: filter, search });
+      if (cancelled) return;
+      if (result.success) {
+        setCompanions(result.data);
+        setError(null);
+      } else {
+        setError(result.error);
+      }
+      setIsLoading(false);
+    }, search ? 300 : 0);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [filter, search]);
 
   const handleBookmark = async (companionId: string) => {
     const result = await toggleBookmark(companionId);
-    if (result.success) {
-      setCompanions(prev => 
-        prev.map(c => 
-          c.id === companionId 
-            ? { ...c, isBookmarked: result.isBookmarked ?? false }
-            : c
-        )
-      );
-    }
+    if (!result.success) return toast.error(result.error);
+    setCompanions((prev) => prev.map((c) => (c.id === companionId ? { ...c, isBookmarked: result.data.isBookmarked } : c)));
+    for (const a of result.newAchievements ?? []) toast.success(`Achievement unlocked: ${a}`);
   };
 
-  const filteredCompanions = search
-    ? companions.filter(c => 
-        c.name.toLowerCase().includes(search.toLowerCase()) ||
-        c.topic.toLowerCase().includes(search.toLowerCase()) ||
-        c.description.toLowerCase().includes(search.toLowerCase())
-      )
-    : companions;
+  const filteredCompanions = companions;
 
   return (
     <div className="animate-in">
@@ -104,23 +74,17 @@ export default function CompanionsPageClient() {
         {/* Search Bar */}
         <div className="flex gap-3">
           <div className="relative flex-1">
+            <label htmlFor="companion-search" className="sr-only">Search companions</label>
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--foreground-muted))]" />
             <input
-              type="text"
+              id="companion-search"
+              type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Search companions..."
               className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--foreground-subtle))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))] focus:border-transparent"
             />
           </div>
-          <button
-            onClick={handleSearch}
-            disabled={isPending}
-            className="px-4 py-2.5 rounded-lg bg-[hsl(var(--primary))] text-white font-medium hover:bg-[hsl(var(--primary)/0.9)] disabled:opacity-50 transition-colors"
-          >
-            {isPending ? "..." : "Search"}
-          </button>
         </div>
 
         {/* Subject Filters */}
@@ -196,12 +160,14 @@ export default function CompanionsPageClient() {
                   <h3 className="font-semibold text-[hsl(var(--foreground))] mb-1">
                     {companion.name}
                   </h3>
-                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] capitalize">
-                    {companion.subject}
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))]">
+                    {subjectLabel(companion.subject)}
                   </span>
                 </div>
-                <button 
+                <button
                   onClick={() => handleBookmark(companion.id)}
+                  aria-label={companion.isBookmarked ? "Remove bookmark" : "Bookmark companion"}
+                  aria-pressed={companion.isBookmarked}
                   className={`p-2 rounded-lg transition-colors ${
                     companion.isBookmarked
                       ? "text-red-500 bg-red-500/10"

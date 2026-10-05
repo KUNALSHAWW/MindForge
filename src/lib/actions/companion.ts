@@ -2,17 +2,10 @@
 
 import { currentUser } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
-
-// Types
-export interface CreateCompanionInput {
-  name: string;
-  subject: string;
-  topic: string;
-  description: string;
-  duration: number;
-  style: "formal" | "casual" | "socratic" | "storytelling";
-  voice: "male" | "female";
-}
+import prisma, { ensureUser, isDatabaseAvailable } from "@/lib/db";
+import { demo, type DemoCompanion } from "@/lib/demo";
+import { awardAchievements } from "@/lib/achievements";
+import { CreateCompanionSchema, firstError, type CreateCompanionInput } from "@/lib/validators";
 
 export interface CompanionWithStats {
   id: string;
@@ -23,718 +16,186 @@ export interface CompanionWithStats {
   duration: number;
   style: string;
   voice: string;
-  authorId: string;
   authorName: string | null;
   sessionsCount: number;
   bookmarksCount: number;
   isBookmarked: boolean;
+  isOwner: boolean;
   createdAt: Date;
 }
 
-// Demo companions for when database is not available
-const demoCompanions: CompanionWithStats[] = [
-  {
-    id: "demo-1",
-    name: "Dr. Physics",
-    subject: "science",
-    topic: "Quantum Mechanics",
-    description: "Expert in quantum physics and theoretical concepts. Uses analogies to explain complex topics like wave-particle duality and quantum entanglement.",
-    duration: 45,
-    style: "socratic",
-    voice: "male",
-    authorId: "demo-user",
-    authorName: "MindForge",
-    sessionsCount: 128,
-    bookmarksCount: 45,
-    isBookmarked: false,
-    createdAt: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "demo-2",
-    name: "Math Master",
-    subject: "maths",
-    topic: "Calculus & Linear Algebra",
-    description: "Patient tutor specializing in calculus, algebra, and mathematical proofs. Step-by-step problem solving approach.",
-    duration: 60,
-    style: "formal",
-    voice: "female",
-    authorId: "demo-user",
-    authorName: "MindForge",
-    sessionsCount: 256,
-    bookmarksCount: 89,
-    isBookmarked: true,
-    createdAt: new Date(Date.now() - 25 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "demo-3",
-    name: "Code Coach",
-    subject: "coding",
-    topic: "Python & JavaScript",
-    description: "Friendly coding mentor who teaches through practical examples and projects. Great for beginners and intermediate developers.",
-    duration: 45,
-    style: "casual",
-    voice: "male",
-    authorId: "demo-user",
-    authorName: "MindForge",
-    sessionsCount: 312,
-    bookmarksCount: 156,
-    isBookmarked: false,
-    createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "demo-4",
-    name: "History Guide",
-    subject: "history",
-    topic: "World History",
-    description: "Engaging storyteller who brings historical events to life with vivid narratives. From ancient civilizations to modern history.",
-    duration: 30,
-    style: "storytelling",
-    voice: "female",
-    authorId: "demo-user",
-    authorName: "MindForge",
-    sessionsCount: 89,
-    bookmarksCount: 34,
-    isBookmarked: false,
-    createdAt: new Date(Date.now() - 15 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "demo-5",
-    name: "Language Pro",
-    subject: "language",
-    topic: "English & Spanish",
-    description: "Multilingual tutor focused on conversational practice, grammar, and vocabulary building through immersive dialogue.",
-    duration: 30,
-    style: "casual",
-    voice: "female",
-    authorId: "demo-user",
-    authorName: "MindForge",
-    sessionsCount: 167,
-    bookmarksCount: 78,
-    isBookmarked: true,
-    createdAt: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-  },
-  {
-    id: "demo-6",
-    name: "Economics Expert",
-    subject: "economics",
-    topic: "Micro & Macro Economics",
-    description: "Practical approach to economic concepts with real-world examples. Great for students and professionals alike.",
-    duration: 45,
-    style: "formal",
-    voice: "male",
-    authorId: "demo-user",
-    authorName: "MindForge",
-    sessionsCount: 56,
-    bookmarksCount: 23,
-    isBookmarked: false,
-    createdAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-  },
-];
+type Result<T = undefined> = { success: true; data: T; newAchievements?: string[] } | { success: false; error: string };
 
-// In-memory storage for demo mode
-let localCompanions: CompanionWithStats[] = [...demoCompanions];
-let localBookmarks: Set<string> = new Set(["demo-2", "demo-5"]);
+function fromDemo(c: DemoCompanion, clerkId: string | null): CompanionWithStats {
+  const { authorId, ...rest } = c;
+  return { ...rest, isBookmarked: demo.bookmarks.has(c.id), isOwner: authorId === clerkId };
+}
 
-// Check if database is available
-async function isDatabaseAvailable(): Promise<boolean> {
+const companionInclude = (userId: string | null) => ({
+  author: { select: { name: true } },
+  _count: { select: { sessions: true, bookmarks: true } },
+  bookmarks: { where: { userId: userId ?? "" }, select: { id: true } },
+});
+
+type CompanionRow = {
+  id: string; name: string; subject: string; topic: string; description: string; duration: number;
+  style: string; voice: string; authorId: string; createdAt: Date;
+  author: { name: string | null }; _count: { sessions: number; bookmarks: number }; bookmarks: { id: string }[];
+};
+
+function toCompanion(c: CompanionRow, userId: string | null): CompanionWithStats {
+  return {
+    id: c.id, name: c.name, subject: c.subject, topic: c.topic, description: c.description,
+    duration: c.duration, style: c.style, voice: c.voice, authorName: c.author.name,
+    sessionsCount: c._count.sessions, bookmarksCount: c._count.bookmarks,
+    isBookmarked: c.bookmarks.length > 0, isOwner: c.authorId === userId, createdAt: c.createdAt,
+  };
+}
+
+async function currentDbUserId(): Promise<string | null> {
+  const clerkUser = await currentUser();
+  if (!clerkUser) return null;
+  const user = await prisma.user.findUnique({ where: { clerkId: clerkUser.id }, select: { id: true } });
+  return user?.id ?? null;
+}
+
+export async function createCompanion(input: CreateCompanionInput): Promise<Result<CompanionWithStats>> {
+  const clerkUser = await currentUser();
+  if (!clerkUser) return { success: false, error: "Not authenticated" };
+
+  const parsed = CreateCompanionSchema.safeParse(input);
+  if (!parsed.success) return { success: false, error: firstError(parsed.error) };
+  const data = parsed.data;
+
   try {
-    const dbModule = await import("@/lib/db");
-    const prisma = dbModule.default;
-    await prisma.$queryRaw`SELECT 1`;
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// Get Prisma client (only when database is available)
-async function getPrisma() {
-  const dbModule = await import("@/lib/db");
-  return dbModule.default;
-}
-
-// Ensure user exists in database, create if not
-async function ensureUserExists(
-  prisma: Awaited<ReturnType<typeof getPrisma>>,
-  clerkUser: { id: string; emailAddresses: { emailAddress: string }[]; firstName?: string | null; lastName?: string | null; imageUrl?: string | null }
-) {
-  const email = clerkUser.emailAddresses[0]?.emailAddress ?? "";
-  const name = `${clerkUser.firstName ?? ""} ${clerkUser.lastName ?? ""}`.trim() || null;
-  
-  let user = await prisma.user.findUnique({
-    where: { clerkId: clerkUser.id },
-  });
-
-  if (!user) {
-    user = await prisma.user.create({
-      data: {
-        clerkId: clerkUser.id,
-        email,
-        name,
-        image: clerkUser.imageUrl ?? null,
-      },
-    });
-  }
-
-  return user;
-}
-
-// Create a new companion
-export async function createCompanion(input: CreateCompanionInput): Promise<{ success: boolean; data?: CompanionWithStats; error?: string }> {
-  try {
-    const clerkUser = await currentUser();
-    if (!clerkUser) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: create in local storage
-      const newCompanion: CompanionWithStats = {
-        id: `local-${Date.now()}`,
-        name: input.name,
-        subject: input.subject,
-        topic: input.topic,
-        description: input.description,
-        duration: input.duration,
-        style: input.style,
-        voice: input.voice,
-        authorId: clerkUser.id,
-        authorName: clerkUser.firstName || "You",
-        sessionsCount: 0,
-        bookmarksCount: 0,
-        isBookmarked: false,
-        createdAt: new Date(),
+    if (!(await isDatabaseAvailable())) {
+      const companion: DemoCompanion = {
+        ...data, id: `local-${Date.now()}`, authorId: clerkUser.id, authorName: clerkUser.firstName || "You",
+        sessionsCount: 0, bookmarksCount: 0, createdAt: new Date(),
       };
-      localCompanions.unshift(newCompanion);
+      demo.companions.unshift(companion);
       revalidatePath("/companions");
-      return { success: true, data: newCompanion };
+      return { success: true, data: fromDemo(companion, clerkUser.id) };
     }
 
-    const prisma = await getPrisma();
-    const user = await ensureUserExists(prisma, clerkUser);
-
-    const companion = await prisma.companion.create({
-      data: {
-        name: input.name,
-        subject: input.subject,
-        topic: input.topic,
-        description: input.description,
-        duration: input.duration,
-        style: input.style,
-        voice: input.voice,
-        authorId: user.id,
-      },
-      include: {
-        author: {
-          select: { name: true },
-        },
-        _count: {
-          select: { sessions: true, bookmarks: true },
-        },
-      },
-    });
+    const user = await ensureUser(clerkUser);
+    const companion = await prisma.companion.create({ data: { ...data, authorId: user.id }, include: companionInclude(user.id) });
+    const earned = await awardAchievements(user.id);
 
     revalidatePath("/companions");
     revalidatePath("/dashboard");
-
-    return {
-      success: true,
-      data: {
-        id: companion.id,
-        name: companion.name,
-        subject: companion.subject,
-        topic: companion.topic,
-        description: companion.description,
-        duration: companion.duration,
-        style: companion.style,
-        voice: companion.voice,
-        authorId: companion.authorId,
-        authorName: companion.author.name,
-        sessionsCount: companion._count.sessions,
-        bookmarksCount: companion._count.bookmarks,
-        isBookmarked: false,
-        createdAt: companion.createdAt,
-      },
-    };
+    return { success: true, data: toCompanion(companion, user.id), newAchievements: earned.map((a) => a.title) };
   } catch (error) {
     console.error("Error creating companion:", error);
-    return { success: false, error: "Failed to create companion. Please set up DATABASE_URL in your .env.local file." };
+    return { success: false, error: "Failed to create companion" };
   }
 }
 
-// Get all companions with filtering
-export async function getCompanions(filter?: { subject?: string; search?: string }): Promise<{ success: boolean; data?: CompanionWithStats[]; error?: string }> {
+export async function getCompanions(filter?: { subject?: string; search?: string }): Promise<Result<CompanionWithStats[]>> {
+  const subject = filter?.subject && filter.subject !== "all" ? filter.subject : undefined;
+  const search = filter?.search?.trim().slice(0, 100);
+
   try {
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: filter from local storage
-      let filtered = [...localCompanions];
-      
-      if (filter?.subject && filter.subject !== "all") {
-        filtered = filtered.filter(c => c.subject === filter.subject);
-      }
-      
-      if (filter?.search) {
-        const search = filter.search.toLowerCase();
-        filtered = filtered.filter(c => 
-          c.name.toLowerCase().includes(search) ||
-          c.topic.toLowerCase().includes(search) ||
-          c.description.toLowerCase().includes(search)
-        );
-      }
-
-      // Update bookmark status
-      filtered = filtered.map(c => ({
-        ...c,
-        isBookmarked: localBookmarks.has(c.id),
-      }));
-
-      return { success: true, data: filtered };
+    if (!(await isDatabaseAvailable())) {
+      const clerkUser = await currentUser();
+      const q = search?.toLowerCase();
+      const data = demo.companions
+        .filter((c) => !subject || c.subject === subject)
+        .filter((c) => !q || [c.name, c.topic, c.description].some((f) => f.toLowerCase().includes(q)))
+        .map((c) => fromDemo(c, clerkUser?.id ?? null));
+      return { success: true, data };
     }
 
-    const prisma = await getPrisma();
-    const clerkUser = await currentUser();
-    let userId: string | null = null;
-
-    if (clerkUser) {
-      const user = await prisma.user.findUnique({
-        where: { clerkId: clerkUser.id },
-      });
-      userId = user?.id ?? null;
-    }
-
-    interface WhereClause {
-      subject?: string;
-      OR?: Array<{ name: { contains: string; mode: "insensitive" } } | { topic: { contains: string; mode: "insensitive" } } | { description: { contains: string; mode: "insensitive" } }>;
-    }
-    
-    const whereClause: WhereClause = {};
-
-    if (filter?.subject && filter.subject !== "all") {
-      whereClause.subject = filter.subject;
-    }
-
-    if (filter?.search) {
-      whereClause.OR = [
-        { name: { contains: filter.search, mode: "insensitive" } },
-        { topic: { contains: filter.search, mode: "insensitive" } },
-        { description: { contains: filter.search, mode: "insensitive" } },
-      ];
-    }
-
+    const userId = await currentDbUserId();
     const companions = await prisma.companion.findMany({
-      where: whereClause,
-      include: {
-        author: {
-          select: { name: true },
-        },
-        _count: {
-          select: { sessions: true, bookmarks: true },
-        },
-        bookmarks: userId ? {
-          where: { userId },
-        } : false,
+      where: {
+        ...(subject && { subject }),
+        ...(search && {
+          OR: [
+            { name: { contains: search, mode: "insensitive" as const } },
+            { topic: { contains: search, mode: "insensitive" as const } },
+            { description: { contains: search, mode: "insensitive" as const } },
+          ],
+        }),
       },
+      include: companionInclude(userId),
       orderBy: { createdAt: "desc" },
+      take: 100,
     });
-
-    interface CompanionResult {
-      id: string;
-      name: string;
-      subject: string;
-      topic: string;
-      description: string;
-      duration: number;
-      style: string;
-      voice: string;
-      authorId: string;
-      author: { name: string | null };
-      _count: { sessions: number; bookmarks: number };
-      bookmarks: { userId: string }[] | false;
-      createdAt: Date;
-    }
-
-    const companionsWithStats: CompanionWithStats[] = (companions as CompanionResult[]).map((companion) => ({
-      id: companion.id,
-      name: companion.name,
-      subject: companion.subject,
-      topic: companion.topic,
-      description: companion.description,
-      duration: companion.duration,
-      style: companion.style,
-      voice: companion.voice,
-      authorId: companion.authorId,
-      authorName: companion.author.name,
-      sessionsCount: companion._count.sessions,
-      bookmarksCount: companion._count.bookmarks,
-      isBookmarked: userId && companion.bookmarks ? (companion.bookmarks as { userId: string }[]).length > 0 : false,
-      createdAt: companion.createdAt,
-    }));
-
-    return { success: true, data: companionsWithStats };
+    return { success: true, data: companions.map((c) => toCompanion(c, userId)) };
   } catch (error) {
     console.error("Error fetching companions:", error);
-    // Return demo data on error
-    return { success: true, data: localCompanions };
+    return { success: false, error: "Failed to load companions" };
   }
 }
 
-// Get a single companion by ID
-export async function getCompanion(id: string): Promise<{ success: boolean; data?: CompanionWithStats; error?: string }> {
+export async function getCompanion(id: string): Promise<Result<CompanionWithStats>> {
   try {
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: find from local storage
-      const companion = localCompanions.find(c => c.id === id);
-      if (!companion) {
-        return { success: false, error: "Companion not found" };
-      }
-      return { 
-        success: true, 
-        data: { ...companion, isBookmarked: localBookmarks.has(id) } 
-      };
+    if (!(await isDatabaseAvailable())) {
+      const clerkUser = await currentUser();
+      const companion = demo.companions.find((c) => c.id === id);
+      return companion ? { success: true, data: fromDemo(companion, clerkUser?.id ?? null) } : { success: false, error: "Companion not found" };
     }
 
-    const prisma = await getPrisma();
-    const clerkUser = await currentUser();
-    let userId: string | null = null;
-
-    if (clerkUser) {
-      const user = await prisma.user.findUnique({
-        where: { clerkId: clerkUser.id },
-      });
-      userId = user?.id ?? null;
-    }
-
-    const companion = await prisma.companion.findUnique({
-      where: { id },
-      include: {
-        author: {
-          select: { name: true },
-        },
-        _count: {
-          select: { sessions: true, bookmarks: true },
-        },
-        bookmarks: userId ? {
-          where: { userId },
-        } : false,
-      },
-    });
-
-    if (!companion) {
-      return { success: false, error: "Companion not found" };
-    }
-
-    return {
-      success: true,
-      data: {
-        id: companion.id,
-        name: companion.name,
-        subject: companion.subject,
-        topic: companion.topic,
-        description: companion.description,
-        duration: companion.duration,
-        style: companion.style,
-        voice: companion.voice,
-        authorId: companion.authorId,
-        authorName: companion.author.name,
-        sessionsCount: companion._count.sessions,
-        bookmarksCount: companion._count.bookmarks,
-        isBookmarked: userId && companion.bookmarks ? (companion.bookmarks as { userId: string }[]).length > 0 : false,
-        createdAt: companion.createdAt,
-      },
-    };
+    const userId = await currentDbUserId();
+    const companion = await prisma.companion.findUnique({ where: { id }, include: companionInclude(userId) });
+    return companion ? { success: true, data: toCompanion(companion, userId) } : { success: false, error: "Companion not found" };
   } catch (error) {
     console.error("Error fetching companion:", error);
-    // Try to find in demo data
-    const demoCompanion = localCompanions.find(c => c.id === id);
-    if (demoCompanion) {
-      return { success: true, data: demoCompanion };
-    }
-    return { success: false, error: "Failed to fetch companion" };
+    return { success: false, error: "Failed to load companion" };
   }
 }
 
-// Toggle bookmark for a companion
-export async function toggleBookmark(companionId: string): Promise<{ success: boolean; isBookmarked?: boolean; error?: string }> {
+export async function toggleBookmark(companionId: string): Promise<Result<{ isBookmarked: boolean }>> {
+  const clerkUser = await currentUser();
+  if (!clerkUser) return { success: false, error: "Not authenticated" };
+
   try {
-    const clerkUser = await currentUser();
-    if (!clerkUser) {
-      return { success: false, error: "Not authenticated" };
+    if (!(await isDatabaseAvailable())) {
+      const isBookmarked = !demo.bookmarks.delete(companionId);
+      if (isBookmarked) demo.bookmarks.add(companionId);
+      revalidatePath("/companions");
+      return { success: true, data: { isBookmarked } };
     }
 
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: toggle in local storage
-      const wasBookmarked = localBookmarks.has(companionId);
-      if (wasBookmarked) {
-        localBookmarks.delete(companionId);
-      } else {
-        localBookmarks.add(companionId);
-      }
-      revalidatePath("/companions");
-      return { success: true, isBookmarked: !wasBookmarked };
-    }
-
-    const prisma = await getPrisma();
-    const user = await ensureUserExists(prisma, clerkUser);
-
-    const existingBookmark = await prisma.bookmark.findUnique({
-      where: {
-        userId_companionId: {
-          userId: user.id,
-          companionId,
-        },
-      },
-    });
-
-    if (existingBookmark) {
-      await prisma.bookmark.delete({
-        where: { id: existingBookmark.id },
-      });
-      revalidatePath("/companions");
-      return { success: true, isBookmarked: false };
+    const user = await ensureUser(clerkUser);
+    const key = { userId_companionId: { userId: user.id, companionId } };
+    const existing = await prisma.bookmark.findUnique({ where: key });
+    if (existing) {
+      await prisma.bookmark.delete({ where: key });
     } else {
-      await prisma.bookmark.create({
-        data: {
-          userId: user.id,
-          companionId,
-        },
-      });
-      revalidatePath("/companions");
-      return { success: true, isBookmarked: true };
+      await prisma.bookmark.create({ data: { userId: user.id, companionId } });
     }
+    const earned = existing ? [] : await awardAchievements(user.id);
+    revalidatePath("/companions");
+    return { success: true, data: { isBookmarked: !existing }, newAchievements: earned.map((a) => a.title) };
   } catch (error) {
     console.error("Error toggling bookmark:", error);
-    return { success: false, error: "Failed to toggle bookmark" };
+    return { success: false, error: "Failed to update bookmark" };
   }
 }
 
-// Delete a companion (only by author)
-export async function deleteCompanion(companionId: string): Promise<{ success: boolean; error?: string }> {
+export async function deleteCompanion(companionId: string): Promise<Result> {
+  const clerkUser = await currentUser();
+  if (!clerkUser) return { success: false, error: "Not authenticated" };
+
   try {
-    const clerkUser = await currentUser();
-    if (!clerkUser) {
-      return { success: false, error: "Not authenticated" };
+    if (!(await isDatabaseAvailable())) {
+      const index = demo.companions.findIndex((c) => c.id === companionId);
+      if (index === -1) return { success: false, error: "Companion not found" };
+      if (demo.companions[index].authorId !== clerkUser.id) return { success: false, error: "Only the author can delete this companion" };
+      demo.companions.splice(index, 1);
+      demo.bookmarks.delete(companionId);
+    } else {
+      // deleteMany with the author in the filter makes the ownership check and delete atomic
+      const { count } = await prisma.companion.deleteMany({ where: { id: companionId, author: { clerkId: clerkUser.id } } });
+      if (count === 0) return { success: false, error: "Companion not found or you are not its author" };
     }
-
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: delete from local storage
-      const index = localCompanions.findIndex(c => c.id === companionId);
-      if (index === -1) {
-        return { success: false, error: "Companion not found" };
-      }
-      const companion = localCompanions[index];
-      if (companion.authorId !== clerkUser.id && !companion.id.startsWith("local-")) {
-        return { success: false, error: "Not authorized to delete this companion" };
-      }
-      localCompanions.splice(index, 1);
-      localBookmarks.delete(companionId);
-      revalidatePath("/companions");
-      return { success: true };
-    }
-
-    const prisma = await getPrisma();
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUser.id },
-    });
-
-    if (!user) {
-      return { success: false, error: "User not found" };
-    }
-
-    const companion = await prisma.companion.findUnique({
-      where: { id: companionId },
-    });
-
-    if (!companion) {
-      return { success: false, error: "Companion not found" };
-    }
-
-    if (companion.authorId !== user.id) {
-      return { success: false, error: "Not authorized to delete this companion" };
-    }
-
-    await prisma.companion.delete({
-      where: { id: companionId },
-    });
-
     revalidatePath("/companions");
     revalidatePath("/dashboard");
-
-    return { success: true };
+    return { success: true, data: undefined };
   } catch (error) {
     console.error("Error deleting companion:", error);
     return { success: false, error: "Failed to delete companion" };
-  }
-}
-
-// Get user's companions
-export async function getUserCompanions(): Promise<{ success: boolean; data?: CompanionWithStats[]; error?: string }> {
-  try {
-    const clerkUser = await currentUser();
-    if (!clerkUser) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: return locally created companions
-      const userCompanions = localCompanions.filter(c => 
-        c.authorId === clerkUser.id || c.id.startsWith("local-")
-      );
-      return { success: true, data: userCompanions };
-    }
-
-    const prisma = await getPrisma();
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUser.id },
-    });
-
-    if (!user) {
-      return { success: true, data: [] };
-    }
-
-    const companions = await prisma.companion.findMany({
-      where: { authorId: user.id },
-      include: {
-        author: {
-          select: { name: true },
-        },
-        _count: {
-          select: { sessions: true, bookmarks: true },
-        },
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    interface CompanionResult {
-      id: string;
-      name: string;
-      subject: string;
-      topic: string;
-      description: string;
-      duration: number;
-      style: string;
-      voice: string;
-      authorId: string;
-      author: { name: string | null };
-      _count: { sessions: number; bookmarks: number };
-      createdAt: Date;
-    }
-
-    const companionsWithStats: CompanionWithStats[] = (companions as CompanionResult[]).map((companion) => ({
-      id: companion.id,
-      name: companion.name,
-      subject: companion.subject,
-      topic: companion.topic,
-      description: companion.description,
-      duration: companion.duration,
-      style: companion.style,
-      voice: companion.voice,
-      authorId: companion.authorId,
-      authorName: companion.author.name,
-      sessionsCount: companion._count.sessions,
-      bookmarksCount: companion._count.bookmarks,
-      isBookmarked: true,
-      createdAt: companion.createdAt,
-    }));
-
-    return { success: true, data: companionsWithStats };
-  } catch (error) {
-    console.error("Error fetching user companions:", error);
-    return { success: false, error: "Failed to fetch companions" };
-  }
-}
-
-// Get bookmarked companions
-export async function getBookmarkedCompanions(): Promise<{ success: boolean; data?: CompanionWithStats[]; error?: string }> {
-  try {
-    const clerkUser = await currentUser();
-    if (!clerkUser) {
-      return { success: false, error: "Not authenticated" };
-    }
-
-    const dbAvailable = await isDatabaseAvailable();
-
-    if (!dbAvailable) {
-      // Demo mode: return bookmarked companions from local storage
-      const bookmarked = localCompanions
-        .filter(c => localBookmarks.has(c.id))
-        .map(c => ({ ...c, isBookmarked: true }));
-      return { success: true, data: bookmarked };
-    }
-
-    const prisma = await getPrisma();
-    const user = await prisma.user.findUnique({
-      where: { clerkId: clerkUser.id },
-      include: {
-        bookmarks: {
-          include: {
-            companion: {
-              include: {
-                author: {
-                  select: { name: true },
-                },
-                _count: {
-                  select: { sessions: true, bookmarks: true },
-                },
-              },
-            },
-          },
-        },
-      },
-    });
-
-    if (!user) {
-      return { success: true, data: [] };
-    }
-
-    interface BookmarkResult {
-      companion: {
-        id: string;
-        name: string;
-        subject: string;
-        topic: string;
-        description: string;
-        duration: number;
-        style: string;
-        voice: string;
-        authorId: string;
-        author: { name: string | null };
-        _count: { sessions: number; bookmarks: number };
-        createdAt: Date;
-      };
-    }
-
-    const companionsWithStats: CompanionWithStats[] = (user.bookmarks as BookmarkResult[]).map((bookmark) => ({
-      id: bookmark.companion.id,
-      name: bookmark.companion.name,
-      subject: bookmark.companion.subject,
-      topic: bookmark.companion.topic,
-      description: bookmark.companion.description,
-      duration: bookmark.companion.duration,
-      style: bookmark.companion.style,
-      voice: bookmark.companion.voice,
-      authorId: bookmark.companion.authorId,
-      authorName: bookmark.companion.author.name,
-      sessionsCount: bookmark.companion._count.sessions,
-      bookmarksCount: bookmark.companion._count.bookmarks,
-      isBookmarked: true,
-      createdAt: bookmark.companion.createdAt,
-    }));
-
-    return { success: true, data: companionsWithStats };
-  } catch (error) {
-    console.error("Error fetching bookmarked companions:", error);
-    return { success: false, error: "Failed to fetch bookmarked companions" };
   }
 }

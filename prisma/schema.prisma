@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,146 +8,166 @@ datasource db {
 }
 
 model User {
-  id                  String      @id @default(cuid())
-  clerkId             String      @unique
-  email               String      @unique
-  name                String?
-  image               String?
-  bio                 String?
-  
+  id       String  @id @default(cuid())
+  clerkId  String  @unique
+  email    String  @unique
+  name     String?
+  image    String?
+  bio      String?
+  settings Json?
+  timeZone String  @default("UTC") // IANA zone of the last session, used for streak days
+
   // Stats
-  level               Int         @default(1)
-  totalXP             Int         @default(0)
-  currentStreak       Int         @default(0)
-  longestStreak       Int         @default(0)
-  totalSessionMinutes Int         @default(0)
-  
+  level               Int @default(1)
+  totalXP             Int @default(0)
+  currentStreak       Int @default(0)
+  longestStreak       Int @default(0)
+  totalSessionMinutes Int @default(0)
+
   // Relations
-  companions          Companion[]
-  sessions            SessionHistory[]
-  achievements        Achievement[]
-  documents           RAGDocument[]
-  bookmarks           Bookmark[]
-  
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
-  
+  companions   Companion[]
+  sessions     SessionHistory[]
+  achievements Achievement[]
+  documents    RAGDocument[]
+  bookmarks    Bookmark[]
+  flashcards   Flashcard[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([clerkId])
 }
 
 model Companion {
-  id          String      @id @default(cuid())
+  id          String @id @default(cuid())
   name        String
   subject     String
   topic       String
-  description String      @db.Text
+  description String @db.Text
   duration    Int
-  style       String      // formal, casual, socratic, storytelling
-  voice       String      // male, female
-  
+  style       String // formal, casual, socratic, storytelling
+  voice       String // male, female
+
   // Relations
-  author      User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  authorId    String
-  
-  sessions    SessionHistory[]
-  bookmarks   Bookmark[]
-  
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
+  author   User   @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  authorId String
+
+  sessions   SessionHistory[]
+  bookmarks  Bookmark[]
+  flashcards Flashcard[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([authorId])
   @@index([subject])
   @@index([name])
 }
 
 model SessionHistory {
-  id              String      @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Relations
-  companion       Companion   @relation(fields: [companionId], references: [id], onDelete: Cascade)
-  companionId     String
-  
-  user            User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId          String
-  
+  companion   Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  companionId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
   // Session Data
   durationMinutes Int
   transcript      String      @db.Text
   xpEarned        Int         @default(0)
-  notes           String?     @db.Text
-  
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
-  
+  notes           String?     @db.Text // AI-generated session summary
+  flashcards      Flashcard[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([companionId])
   @@index([createdAt])
 }
 
 model Achievement {
-  id          String      @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   title       String
   description String
   icon        String
-  
+
   // Relations
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  
-  unlockedAt  DateTime    @default(now())
-  
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  unlockedAt DateTime @default(now())
+
   @@unique([userId, title])
   @@index([userId])
 }
 
 model Bookmark {
-  id          String      @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Relations
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  
-  companion   Companion   @relation(fields: [companionId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  companion   Companion @relation(fields: [companionId], references: [id], onDelete: Cascade)
   companionId String
-  
-  createdAt   DateTime    @default(now())
-  
+
+  createdAt DateTime @default(now())
+
   @@unique([userId, companionId])
   @@index([userId])
   @@index([companionId])
 }
 
 model RAGDocument {
-  id          String      @id @default(cuid())
-  
-  title       String
-  content     String      @db.Text
-  embedding   String      @db.Text // JSON stringified vector
-  subject     String
-  
+  id String @id @default(cuid())
+
+  title      String
+  content    String @db.Text
+  // JSON array of chunk embeddings aligned with chunkText(content); "[]" when embeddings are off
+  embeddings String @default("[]") @db.Text
+  subject    String
+
   // Relations
-  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId      String
-  
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([userId])
   @@index([subject])
 }
 
-model LearningPath {
-  id          String      @id @default(cuid())
-  
-  title       String
-  description String      @db.Text
-  subject     String
-  
-  modules     String      @db.Text // JSON stringified modules
-  completed   Int         @default(0)
-  total       Int
-  
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
+// Spaced-repetition card scheduled with FSRS-4.5 (src/lib/fsrs.ts)
+model Flashcard {
+  id      String @id @default(cuid())
+  front   String @db.Text
+  back    String @db.Text
+  subject String
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId      String
+  companion   Companion?      @relation(fields: [companionId], references: [id], onDelete: SetNull)
+  companionId String?
+  session     SessionHistory? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  sessionId   String?
+
+  // FSRS memory state
+  stability  Float     @default(0)
+  difficulty Float     @default(0)
+  reps       Int       @default(0)
+  lapses     Int       @default(0)
+  due        DateTime  @default(now())
+  lastReview DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, due])
+  @@index([companionId])
 }

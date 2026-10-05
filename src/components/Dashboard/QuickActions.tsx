@@ -1,35 +1,11 @@
 import Link from "next/link";
-import { Plus, BookOpen, BarChart3, Trophy, ArrowRight } from "lucide-react";
+import { Plus, BookOpen, Brain, FileText, ArrowRight } from "lucide-react";
 
 const actions = [
-  {
-    href: "/companions/create",
-    label: "New Session",
-    description: "Start learning with a companion",
-    icon: Plus,
-    primary: true,
-  },
-  {
-    href: "/companions",
-    label: "Browse Companions",
-    description: "Explore AI tutors",
-    icon: BookOpen,
-    primary: false,
-  },
-  {
-    href: "/journey",
-    label: "View Analytics",
-    description: "Track your progress",
-    icon: BarChart3,
-    primary: false,
-  },
-  {
-    href: "/achievements",
-    label: "Achievements",
-    description: "See your badges",
-    icon: Trophy,
-    primary: false,
-  },
+  { href: "/companions", label: "Start a Session", description: "Talk or type with an AI tutor", icon: BookOpen, primary: true },
+  { href: "/review", label: "Review Flashcards", description: "Recall what you are about to forget", icon: Brain, primary: false },
+  { href: "/forge", label: "Upload Notes", description: "Ground tutors in your own material", icon: FileText, primary: false },
+  { href: "/companions/create", label: "Create Companion", description: "Design your own tutor", icon: Plus, primary: false },
 ];
 
 export function QuickActions() {

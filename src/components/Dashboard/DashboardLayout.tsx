@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { UserButton } from "@clerk/nextjs";
 import {
   LayoutDashboard,
@@ -13,8 +13,10 @@ import {
   Sparkles,
   Menu,
   X,
-  Bell,
   Search,
+  Brain,
+  FileText,
+  Trophy,
 } from "lucide-react";
 import { ThemeToggle } from "./ThemeToggle";
 
@@ -27,7 +29,10 @@ interface SidebarLink {
 const mainLinks: SidebarLink[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/companions", label: "Companions", icon: Users },
+  { href: "/review", label: "Review", icon: Brain },
+  { href: "/forge", label: "Knowledge Forge", icon: FileText },
   { href: "/journey", label: "Learning Journey", icon: Compass },
+  { href: "/achievements", label: "Achievements", icon: Trophy },
 ];
 
 const secondaryLinks: SidebarLink[] = [
@@ -41,6 +46,7 @@ interface DashboardLayoutProps {
 
 export function DashboardLayout({ children, userName }: DashboardLayoutProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -231,24 +237,31 @@ export function DashboardLayout({ children, userName }: DashboardLayoutProps) {
         {/* Desktop Header */}
         <header className="hidden lg:flex h-16 bg-[hsl(var(--background))] border-b border-[hsl(var(--border))] items-center justify-between px-6">
           {/* Search */}
-          <div className="flex items-center gap-2 flex-1 max-w-md">
+          <form
+            role="search"
+            className="flex items-center gap-2 flex-1 max-w-md"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const q = new FormData(e.currentTarget).get("q")?.toString().trim();
+              router.push(q ? `/companions?q=${encodeURIComponent(q)}` : "/companions");
+            }}
+          >
             <div className="relative w-full">
+              <label htmlFor="global-search" className="sr-only">Search companions</label>
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(var(--foreground-muted))]" />
               <input
-                type="text"
-                placeholder="Search companions, sessions..."
+                id="global-search"
+                name="q"
+                type="search"
+                placeholder="Search companions by name or topic…"
                 className="w-full pl-10 pr-4 py-2 bg-[hsl(var(--background-secondary))] border border-[hsl(var(--border))] rounded-lg text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--foreground-subtle))] focus:outline-none focus:border-[hsl(var(--primary))] focus:ring-2 focus:ring-[hsl(var(--primary)/0.1)] transition-all"
               />
             </div>
-          </div>
+          </form>
 
           {/* Right Actions */}
           <div className="flex items-center gap-2">
             <ThemeToggle />
-            <button className="relative p-2 rounded-lg hover:bg-[hsl(var(--muted))] transition-colors">
-              <Bell className="w-5 h-5 text-[hsl(var(--foreground-muted))]" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[hsl(var(--primary))] rounded-full" />
-            </button>
             <div className="h-6 w-px bg-[hsl(var(--border))]" />
             <UserButton
               appearance={{

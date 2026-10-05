@@ -1,32 +1,10 @@
 import Link from "next/link";
 import { Users, Play, ArrowRight } from "lucide-react";
 import type { CompanionData } from "@/lib/actions/user";
+import { subjectIcon, subjectLabel } from "@/lib/subjects";
 
 interface CompanionGridProps {
   companions: CompanionData[];
-}
-
-function getSubjectEmoji(subject: string): string {
-  const subjectEmojis: Record<string, string> = {
-    mathematics: "📐",
-    physics: "⚛️",
-    chemistry: "🧪",
-    biology: "🧬",
-    history: "📜",
-    geography: "🌍",
-    literature: "📚",
-    language: "🗣️",
-    programming: "💻",
-    music: "🎵",
-    art: "🎨",
-    default: "📖",
-  };
-
-  const normalizedSubject = subject.toLowerCase();
-  for (const [key, emoji] of Object.entries(subjectEmojis)) {
-    if (normalizedSubject.includes(key)) return emoji;
-  }
-  return subjectEmojis.default;
 }
 
 function getStyleBadge(style: string): { label: string; color: string } {
@@ -75,14 +53,14 @@ export function CompanionGrid({ companions }: CompanionGridProps) {
           >
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-lg bg-[hsl(var(--primary)/0.1)] flex items-center justify-center flex-shrink-0 text-lg">
-                {getSubjectEmoji(companion.subject)}
+                {subjectIcon(companion.subject)}
               </div>
               <div className="min-w-0 flex-1">
                 <h4 className="text-sm font-medium text-[hsl(var(--foreground))] truncate group-hover:text-[hsl(var(--primary))] transition-colors">
                   {companion.name}
                 </h4>
                 <p className="text-xs text-[hsl(var(--foreground-muted))] truncate">
-                  {companion.subject}
+                  {subjectLabel(companion.subject)}
                 </p>
               </div>
             </div>
