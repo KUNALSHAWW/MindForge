@@ -28,6 +28,16 @@ export interface ClassroomDetail {
   insights: ClassInsights | null; // only for the owner
 }
 
+/** Runs a write and turns unexpected database errors into a friendly result. */
+async function guard<T>(what: string, run: () => Promise<Result<T>>): Promise<Result<T>> {
+  try {
+    return await run();
+  } catch (error) {
+    console.error(`Failed to ${what}:`, error);
+    return { success: false, error: `Could not ${what}` };
+  }
+}
+
 async function requireUser() {
   const clerkUser = await currentUser();
   if (!clerkUser) return null;
@@ -121,27 +131,33 @@ export async function joinClassroom(code: string): Promise<Result<{ id: string; 
 export async function leaveClassroom(classroomId: string): Promise<Result<null>> {
   const user = await requireUser();
   if (!user) return { success: false, error: "Not authenticated" };
-  await prisma.classMember.deleteMany({ where: { classroomId, userId: user.id } });
-  revalidatePath("/classes");
-  return { success: true, data: null };
+  return guard("leave the class", async () => {
+    await prisma.classMember.deleteMany({ where: { classroomId, userId: user.id } });
+    revalidatePath("/classes");
+    return { success: true, data: null };
+  });
 }
 
 export async function deleteClassroom(classroomId: string): Promise<Result<null>> {
   const user = await requireUser();
   if (!user) return { success: false, error: "Not authenticated" };
-  const { count } = await prisma.classroom.deleteMany({ where: { id: classroomId, ownerId: user.id } });
-  if (!count) return { success: false, error: "Only the teacher can delete this class" };
-  revalidatePath("/classes");
-  return { success: true, data: null };
+  return guard("delete the class", async () => {
+    const { count } = await prisma.classroom.deleteMany({ where: { id: classroomId, ownerId: user.id } });
+    if (!count) return { success: false, error: "Only the teacher can delete this class" };
+    revalidatePath("/classes");
+    return { success: true, data: null };
+  });
 }
 
 export async function removeStudent(classroomId: string, studentId: string): Promise<Result<null>> {
   const user = await requireUser();
   if (!user) return { success: false, error: "Not authenticated" };
-  const { count } = await prisma.classMember.deleteMany({ where: { classroomId, userId: studentId, classroom: { ownerId: user.id } } });
-  if (!count) return { success: false, error: "Student not found in your class" };
-  revalidatePath(`/classes/${classroomId}`);
-  return { success: true, data: null };
+  return guard("remove the student", async () => {
+    const { count } = await prisma.classMember.deleteMany({ where: { classroomId, userId: studentId, classroom: { ownerId: user.id } } });
+    if (!count) return { success: false, error: "Student not found in your class" };
+    revalidatePath(`/classes/${classroomId}`);
+    return { success: true, data: null };
+  });
 }
 
 /** Class page. Insights (aggregated progress of members) are computed only for the owner. */
