@@ -15,7 +15,8 @@ export interface MemoryState {
   due: Date;
 }
 
-const W = [
+/** FSRS-4.5 default weights, used until a learner has enough reviews to personalise them. */
+export const DEFAULT_WEIGHTS: readonly number[] = [
   0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461,
   2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755,
 ];
@@ -50,31 +51,52 @@ export function currentRetrievability(state: Pick<MemoryState, "stability" | "la
   return retrievability((now.getTime() - state.lastReview.getTime()) / DAY_MS, state.stability);
 }
 
+type Weights = readonly number[];
+const MIN_STABILITY = 0.01;
 const clampDifficulty = (d: number) => Math.min(10, Math.max(1, d));
-const initDifficulty = (g: Rating) => clampDifficulty(W[4] - (g - 3) * W[5]);
-const initStability = (g: Rating) => W[g - 1];
+const initDifficulty = (g: Rating, w: Weights) => clampDifficulty(w[4] - (g - 3) * w[5]);
+const initStability = (g: Rating, w: Weights) => Math.max(MIN_STABILITY, w[g - 1]);
 
-function nextDifficulty(d: number, g: Rating): number {
-  const updated = d - W[6] * (g - 3);
-  return clampDifficulty(W[7] * initDifficulty(3) + (1 - W[7]) * updated); // mean reversion
+function nextDifficulty(d: number, g: Rating, w: Weights): number {
+  const updated = d - w[6] * (g - 3);
+  return clampDifficulty(w[7] * initDifficulty(3, w) + (1 - w[7]) * updated); // mean reversion
 }
 
-function recallStability(d: number, s: number, r: number, g: Rating): number {
-  const hardPenalty = g === 2 ? W[15] : 1;
-  const easyBonus = g === 4 ? W[16] : 1;
+function recallStability(d: number, s: number, r: number, g: Rating, w: Weights): number {
+  const hardPenalty = g === 2 ? w[15] : 1;
+  const easyBonus = g === 4 ? w[16] : 1;
   return (
     s *
-    (Math.exp(W[8]) * (11 - d) * Math.pow(s, -W[9]) * (Math.exp(W[10] * (1 - r)) - 1) * hardPenalty * easyBonus + 1)
+    (Math.exp(w[8]) * (11 - d) * Math.pow(s, -w[9]) * (Math.exp(w[10] * (1 - r)) - 1) * hardPenalty * easyBonus + 1)
   );
 }
 
-function forgetStability(d: number, s: number, r: number): number {
-  const next = W[11] * Math.pow(d, -W[12]) * (Math.pow(s + 1, W[13]) - 1) * Math.exp(W[14] * (1 - r));
-  return Math.min(next, s); // forgetting never increases stability
+function forgetStability(d: number, s: number, r: number, w: Weights): number {
+  const next = w[11] * Math.pow(d, -w[12]) * (Math.pow(s + 1, w[13]) - 1) * Math.exp(w[14] * (1 - r));
+  return Math.max(MIN_STABILITY, Math.min(next, s)); // forgetting never increases stability
+}
+
+/**
+ * One FSRS memory update. `state` is null for a card seen for the first time and
+ * `r` is the predicted recall probability at the moment of this review.
+ * Shared by the scheduler and the optimizer so both use identical maths.
+ */
+export function updateMemory(
+  state: { stability: number; difficulty: number } | null,
+  r: number,
+  g: Rating,
+  w: Weights = DEFAULT_WEIGHTS,
+): { stability: number; difficulty: number } {
+  if (!state) return { stability: initStability(g, w), difficulty: initDifficulty(g, w) };
+  // Stability uses the difficulty *before* this review (as in the reference implementation).
+  return {
+    stability: g === 1 ? forgetStability(state.difficulty, state.stability, r, w) : recallStability(state.difficulty, state.stability, r, g, w),
+    difficulty: nextDifficulty(state.difficulty, g, w),
+  };
 }
 
 /** Next memory state for every rating. Intervals are forced to be ordered Hard <= Good < Easy. */
-export function scheduleAll(card: MemoryState, now = new Date()): Record<Rating, MemoryState> {
+export function scheduleAll(card: MemoryState, now = new Date(), w: Weights = DEFAULT_WEIGHTS): Record<Rating, MemoryState> {
   const ratings: Rating[] = [1, 2, 3, 4];
   const isNew = card.reps === 0 || card.stability <= 0;
   const elapsed = card.lastReview ? (now.getTime() - card.lastReview.getTime()) / DAY_MS : 0;
@@ -83,14 +105,9 @@ export function scheduleAll(card: MemoryState, now = new Date()): Record<Rating,
   const stability = {} as Record<Rating, number>;
   const difficulty = {} as Record<Rating, number>;
   for (const g of ratings) {
-    if (isNew) {
-      stability[g] = initStability(g);
-      difficulty[g] = initDifficulty(g);
-    } else {
-      // Stability uses the difficulty *before* this review (as in the reference implementation).
-      stability[g] = g === 1 ? forgetStability(card.difficulty, card.stability, r) : recallStability(card.difficulty, card.stability, r, g);
-      difficulty[g] = nextDifficulty(card.difficulty, g);
-    }
+    const next = updateMemory(isNew ? null : card, r, g, w);
+    stability[g] = next.stability;
+    difficulty[g] = next.difficulty;
   }
 
   let hard = intervalDays(stability[2]);
@@ -114,8 +131,8 @@ export function scheduleAll(card: MemoryState, now = new Date()): Record<Rating,
   return out;
 }
 
-export function schedule(card: MemoryState, rating: Rating, now = new Date()): MemoryState {
-  return scheduleAll(card, now)[rating];
+export function schedule(card: MemoryState, rating: Rating, now = new Date(), w: Weights = DEFAULT_WEIGHTS): MemoryState {
+  return scheduleAll(card, now, w)[rating];
 }
 
 /** Human readable interval for rating buttons, e.g. "10m", "3d", "2mo". */

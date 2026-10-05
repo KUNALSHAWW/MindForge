@@ -89,6 +89,7 @@ export async function exportUserData(): Promise<Result<object>> {
         bookmarks: { include: { companion: { select: { name: true } } } },
         documents: { select: { title: true, subject: true, content: true, createdAt: true } },
         flashcards: true,
+        reviewLogs: { select: { cardId: true, rating: true, reviewedAt: true }, orderBy: { reviewedAt: "asc" } },
       },
     });
     if (!user) return { success: false, error: "No data stored yet" };
@@ -97,7 +98,7 @@ export async function exportUserData(): Promise<Result<object>> {
       success: true,
       data: {
         exportedAt: new Date().toISOString(),
-        profile: { email: user.email, name: user.name, bio: user.bio, timeZone: user.timeZone, settings: user.settings, createdAt: user.createdAt },
+        profile: { email: user.email, name: user.name, bio: user.bio, timeZone: user.timeZone, settings: user.settings, memoryModel: user.fsrsModel, createdAt: user.createdAt },
         progress: {
           level: user.level, totalXP: user.totalXP, currentStreak: user.currentStreak,
           longestStreak: user.longestStreak, totalSessionMinutes: user.totalSessionMinutes,
@@ -110,6 +111,7 @@ export async function exportUserData(): Promise<Result<object>> {
         bookmarks: user.bookmarks.map((b) => ({ companion: b.companion.name, createdAt: b.createdAt })),
         notes: user.documents,
         flashcards: user.flashcards.map(({ front, back, subject, stability, difficulty, reps, lapses, due, lastReview }) => ({ front, back, subject, stability, difficulty, reps, lapses, due, lastReview })),
+        reviewLog: user.reviewLogs,
       },
     };
   } catch (error) {

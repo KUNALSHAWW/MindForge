@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Brain, CheckCircle2, Plus, Trash2 } from "lucide-react";
-import { createFlashcard, deleteFlashcard, reviewCard, type ReviewCard, type ReviewQueue } from "@/lib/actions/review";
+import { Brain, CheckCircle2, Cpu, Plus, Trash2 } from "lucide-react";
+import { createFlashcard, deleteFlashcard, optimizeMemoryModel, reviewCard, type ReviewCard, type ReviewQueue } from "@/lib/actions/review";
 import { formatInterval, RATING_LABELS, scheduleAll, type Rating } from "@/lib/fsrs";
 import { SUBJECTS, subjectLabel } from "@/lib/subjects";
 
@@ -33,7 +33,7 @@ export default function ReviewClient({ queue, dailyGoal }: { queue: ReviewQueue;
       setSaving(false);
       if (!result.success) return toast.error(result.error);
 
-      const next = scheduleAll(card, new Date())[rating];
+      const next = scheduleAll(card, new Date(), queue.weights)[rating];
       setCards((prev) => {
         const rest = prev.slice(1);
         // "Again" cards come back at the end of this session (FSRS relearning step).
@@ -44,7 +44,7 @@ export default function ReviewClient({ queue, dailyGoal }: { queue: ReviewQueue;
       setNow(new Date());
       for (const a of result.data.newAchievements) toast.success(`Achievement unlocked: ${a}`);
     },
-    [card, revealed, saving],
+    [card, revealed, saving, queue.weights],
   );
 
   useEffect(() => {
@@ -69,7 +69,7 @@ export default function ReviewClient({ queue, dailyGoal }: { queue: ReviewQueue;
     setRevealed(false);
   }
 
-  const previews = card ? scheduleAll(card, now) : null;
+  const previews = card ? scheduleAll(card, now, queue.weights) : null;
   const goalProgress = Math.min(100, Math.round((reviewed / dailyGoal) * 100));
 
   if (queue.demo) {
@@ -150,6 +150,7 @@ export default function ReviewClient({ queue, dailyGoal }: { queue: ReviewQueue;
         </div>
       )}
 
+      <MemoryModelPanel queue={queue} onOptimized={() => router.refresh()} />
       <AddCard onAdded={() => router.refresh()} />
     </div>
   );
@@ -220,5 +221,48 @@ function AddCard({ onAdded }: { onAdded: () => void }) {
         </button>
       </div>
     </form>
+  );
+}
+
+function MemoryModelPanel({ queue, onOptimized }: { queue: ReviewQueue; onOptimized: () => void }) {
+  const [running, setRunning] = useState(false);
+  const model = queue.model;
+  const gain = model ? Math.round((1 - model.optimizedLoss / model.defaultLoss) * 100) : 0;
+
+  async function optimize() {
+    setRunning(true);
+    const result = await optimizeMemoryModel();
+    setRunning(false);
+    if (!result.success) return toast.error(result.error);
+    const r = result.data;
+    if (r.improved) {
+      toast.success(`Personal model saved: ${Math.round((1 - r.optimizedLoss / r.defaultLoss) * 100)}% lower prediction error on held-out cards`);
+      onOptimized();
+    } else {
+      toast("The default model still predicts your memory best. Keeping it.");
+    }
+  }
+
+  return (
+    <div className="card p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+      <Cpu className="w-8 h-8 text-[hsl(var(--primary))] shrink-0" />
+      <div className="flex-1 text-sm">
+        <p className="font-medium text-[hsl(var(--foreground))]">
+          {model ? "Personal memory model active" : "Using the default FSRS-4.5 model"}
+        </p>
+        <p className="text-[hsl(var(--foreground-muted))]">
+          {model
+            ? `Fitted to ${model.scoredReviews} of your reviews on ${new Date(model.optimizedAt).toLocaleDateString()}: log loss ${model.defaultLoss.toFixed(3)} → ${model.optimizedLoss.toFixed(3)} on held-out cards (${gain}% better).`
+            : `After about 100 reviews spaced a day or more apart, MindForge can fit the scheduler to how you forget. ${queue.reviewCount} reviews logged so far.`}
+        </p>
+      </div>
+      <button
+        onClick={optimize}
+        disabled={running}
+        className="px-4 py-2 rounded-lg border border-[hsl(var(--primary))] text-[hsl(var(--primary))] text-sm font-medium hover:bg-[hsl(var(--primary)/0.06)] disabled:opacity-50 whitespace-nowrap"
+      >
+        {running ? "Fitting…" : model ? "Re-optimise" : "Personalise"}
+      </button>
+    </div>
   );
 }

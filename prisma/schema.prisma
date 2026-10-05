@@ -8,14 +8,15 @@ datasource db {
 }
 
 model User {
-  id       String  @id @default(cuid())
-  clerkId  String  @unique
-  email    String  @unique
-  name     String?
-  image    String?
-  bio      String?
-  settings Json?
-  timeZone String  @default("UTC") // IANA zone of the last session, used for streak days
+  id        String  @id @default(cuid())
+  clerkId   String  @unique
+  email     String  @unique
+  name      String?
+  image     String?
+  bio       String?
+  settings  Json?
+  timeZone  String  @default("UTC") // IANA zone of the last session, used for streak days
+  fsrsModel Json? // personalised FSRS weights + validation metrics (src/lib/fsrs-optimizer.ts)
 
   // Stats
   level               Int @default(1)
@@ -31,6 +32,7 @@ model User {
   documents    RAGDocument[]
   bookmarks    Bookmark[]
   flashcards   Flashcard[]
+  reviewLogs   ReviewLog[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -168,6 +170,22 @@ model Flashcard {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  reviewLogs ReviewLog[]
+
   @@index([userId, due])
   @@index([companionId])
+}
+
+// Every flashcard rating, the training data for per-learner FSRS optimisation
+model ReviewLog {
+  id         String    @id @default(cuid())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  card       Flashcard @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  cardId     String
+  rating     Int
+  reviewedAt DateTime  @default(now())
+
+  @@index([userId, reviewedAt])
+  @@index([cardId])
 }
