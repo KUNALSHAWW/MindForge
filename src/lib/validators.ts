@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { SUBJECT_VALUES, TEACHING_STYLES } from "@/lib/subjects";
 
+export const MAX_DOCUMENT_CHARS = 300_000;
+export const MAX_PDF_BYTES = 10 * 1024 * 1024;
+
 // Prisma ids are cuids; demo-mode ids look like "demo-3" or "local-1712345678".
 const id = z.string().min(1).max(64);
 
@@ -32,7 +35,7 @@ export const ChatRequestSchema = z.object({
 
 export const CreateDocumentSchema = z.object({
   title: z.string().trim().min(1).max(200),
-  content: z.string().trim().min(10, "Add at least a few sentences").max(100_000, "Notes are limited to 100,000 characters"),
+  content: z.string().trim().min(10, "Add at least a few sentences").max(MAX_DOCUMENT_CHARS, "Notes are limited to 300,000 characters"),
   subject: z.enum(SUBJECT_VALUES),
 });
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { bm25Scores, chunkText, cosineSimilarity, hybridSearch, reciprocalRankFusion, tokenize } from "./retrieval.ts";
+import { bm25Scores, chunkDocument, chunkText, PAGE_BREAK, cosineSimilarity, hybridSearch, reciprocalRankFusion, tokenize } from "./retrieval.ts";
 
 test("tokenize lowercases, drops stopwords and keeps unicode letters", () => {
   assert.deepEqual(tokenize("The Mitochondria is the powerhouse of the cell!"), ["mitochondria", "powerhouse", "cell"]);
@@ -38,4 +38,10 @@ test("hybrid search falls back to BM25 without embeddings and fuses with them", 
   const passages = [{ text: "osmosis water membrane", embedding: [0, 1] }, { text: "velocity acceleration force", embedding: [1, 0] }];
   assert.deepEqual(hybridSearch("force", passages, null), [1]);
   assert.deepEqual(hybridSearch("force", passages, [1, 0], 1), [1]);
+});
+
+test("chunkDocument keeps PDF page numbers and leaves plain notes unpaged", () => {
+  const pdf = ["Page one is about atoms.", "Page two is about molecules.", "", "Page four covers bonds."].join(PAGE_BREAK);
+  assert.deepEqual(chunkDocument(pdf).map((c) => c.page), [1, 2, 4]);
+  assert.deepEqual(chunkDocument("Plain notes. No pages."), [{ text: "Plain notes. No pages.", page: null }]);
 });

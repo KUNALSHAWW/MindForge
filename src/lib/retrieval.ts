@@ -40,6 +40,19 @@ export function chunkText(text: string, size = 800): string[] {
   return chunks;
 }
 
+/** Page separator used when storing text extracted from PDFs. */
+export const PAGE_BREAK = "\f";
+
+/**
+ * Chunks a stored document. PDF text keeps one page per PAGE_BREAK, so every chunk
+ * remembers its page number and citations can point to "p. 12".
+ */
+export function chunkDocument(content: string, size = 800): { text: string; page: number | null }[] {
+  const pages = content.split(PAGE_BREAK);
+  if (pages.length === 1) return chunkText(content, size).map((text) => ({ text, page: null }));
+  return pages.flatMap((pageText, i) => chunkText(pageText, size).map((text) => ({ text, page: i + 1 })));
+}
+
 /** Okapi BM25 scores of `query` against every document (k1 = 1.5, b = 0.75). */
 export function bm25Scores(query: string, documents: string[], k1 = 1.5, b = 0.75): number[] {
   const docs = documents.map(tokenize);

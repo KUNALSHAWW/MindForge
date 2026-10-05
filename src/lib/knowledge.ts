@@ -2,7 +2,7 @@ import prisma from "@/lib/db";
 import { embed } from "@/lib/ai/embeddings";
 import type { SourcePassage } from "@/lib/ai/tutor";
 import { currentRetrievability } from "@/lib/fsrs";
-import { chunkText, hybridSearch, type Passage } from "@/lib/retrieval";
+import { chunkDocument, hybridSearch, type Passage } from "@/lib/retrieval";
 
 const MAX_DOCS = 30;
 
@@ -23,7 +23,11 @@ export async function retrievePassages(userId: string, subject: string, query: s
     } catch {
       // stored before embeddings were enabled
     }
-    return chunkText(doc.content).map((text, i) => ({ title: doc.title, text, embedding: vectors[i] }));
+    return chunkDocument(doc.content).map((chunk, i) => ({
+      title: chunk.page ? `${doc.title}, p. ${chunk.page}` : doc.title,
+      text: chunk.text,
+      embedding: vectors[i],
+    }));
   });
 
   const hasVectors = passages.some((p) => p.embedding);

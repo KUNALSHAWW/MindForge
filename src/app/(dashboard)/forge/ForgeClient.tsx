@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { FileText, Trash2, Upload } from "lucide-react";
-import { createDocument, deleteDocument, type DocumentSummary } from "@/lib/actions/knowledge";
+import { FileText, Trash2, Upload, X } from "lucide-react";
+import { createDocument, createDocumentFromPdf, deleteDocument, type DocumentSummary } from "@/lib/actions/knowledge";
 import { SUBJECTS, subjectIcon, subjectLabel } from "@/lib/subjects";
+import { MAX_DOCUMENT_CHARS, MAX_PDF_BYTES } from "@/lib/validators";
 
-const MAX_CHARS = 100_000;
+const MAX_CHARS = MAX_DOCUMENT_CHARS;
 const field = "w-full px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--primary))]";
 
 export default function ForgeClient({ documents, demo, semantic }: { documents: DocumentSummary[]; demo: boolean; semantic: boolean }) {
@@ -16,9 +17,18 @@ export default function ForgeClient({ documents, demo, semantic }: { documents: 
   const [subject, setSubject] = useState<string>(SUBJECTS[0].value);
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
+  const [pdf, setPdf] = useState<File | null>(null);
 
   async function loadFile(file: File) {
-    if (!/\.(txt|md|markdown|csv)$/i.test(file.name)) return toast.error("Upload a .txt or .md file, or paste the text");
+    if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+      if (file.size > MAX_PDF_BYTES) return toast.error("PDFs are limited to 10 MB");
+      setPdf(file);
+      setContent("");
+      if (!title) setTitle(file.name.replace(/\.pdf$/i, ""));
+      return;
+    }
+    if (!/\.(txt|md|markdown|csv)$/i.test(file.name)) return toast.error("Upload a PDF, .txt or .md file, or paste the text");
+    setPdf(null);
     const text = await file.text();
     if (text.length > MAX_CHARS) toast.warning(`Only the first ${MAX_CHARS.toLocaleString()} characters will be used`);
     setContent(text.slice(0, MAX_CHARS));
@@ -28,12 +38,22 @@ export default function ForgeClient({ documents, demo, semantic }: { documents: 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const result = await createDocument({ title, subject, content });
+    let result;
+    if (pdf) {
+      const form = new FormData();
+      form.set("file", pdf);
+      form.set("title", title);
+      form.set("subject", subject);
+      result = await createDocumentFromPdf(form);
+    } else {
+      result = await createDocument({ title, subject, content });
+    }
     setSaving(false);
     if (!result.success) return toast.error(result.error);
     toast.success(`Saved as ${result.data.chunks} searchable passages${result.data.embedded ? " with semantic embeddings" : ""}`);
     setTitle("");
     setContent("");
+    setPdf(null);
     router.refresh();
   }
 
@@ -75,25 +95,42 @@ export default function ForgeClient({ documents, demo, semantic }: { documents: 
             </select>
           </label>
         </div>
-        <label className="block text-sm font-medium text-[hsl(var(--foreground))]">
-          Notes
-          <textarea
-            value={content}
-            onChange={(e) => setContent(e.target.value)}
-            required
-            rows={10}
-            maxLength={MAX_CHARS}
-            placeholder="Paste your notes here, or drop a .txt / .md file onto this card"
-            className={`${field} mt-1 font-mono text-sm`}
-          />
-        </label>
+        {pdf ? (
+          <div className="flex items-center gap-3 p-4 rounded-lg border border-dashed border-[hsl(var(--primary)/0.4)] bg-[hsl(var(--primary)/0.04)] text-sm">
+            <FileText className="w-5 h-5 shrink-0 text-[hsl(var(--primary))]" />
+            <span className="flex-1 min-w-0 truncate text-[hsl(var(--foreground))]">
+              {pdf.name} · {(pdf.size / 1024 / 1024).toFixed(1)} MB · text is extracted page by page so answers can cite page numbers
+            </span>
+            <button type="button" onClick={() => setPdf(null)} aria-label="Remove PDF" className="p-1 rounded hover:bg-[hsl(var(--muted))]">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        ) : (
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">
+            Notes
+            <textarea
+              value={content}
+              onChange={(e) => setContent(e.target.value)}
+              required
+              rows={10}
+              maxLength={MAX_CHARS}
+              placeholder="Paste your notes here, or drop a PDF / .txt / .md file onto this card"
+              className={`${field} mt-1 font-mono text-sm`}
+            />
+          </label>
+        )}
         <div className="flex flex-wrap items-center justify-between gap-3">
           <label className="inline-flex items-center gap-2 text-sm text-[hsl(var(--primary))] cursor-pointer hover:underline">
             <Upload className="w-4 h-4" />
-            Choose a file
-            <input type="file" accept=".txt,.md,.markdown,.csv,text/plain,text/markdown" className="sr-only" onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])} />
+            Choose a PDF or text file
+            <input
+              type="file"
+              accept=".pdf,.txt,.md,.markdown,.csv,application/pdf,text/plain,text/markdown"
+              className="sr-only"
+              onChange={(e) => e.target.files?.[0] && loadFile(e.target.files[0])}
+            />
           </label>
-          <span className="text-xs text-[hsl(var(--foreground-muted))] tabular-nums">{content.length.toLocaleString()} / {MAX_CHARS.toLocaleString()}</span>
+          {!pdf && <span className="text-xs text-[hsl(var(--foreground-muted))] tabular-nums">{content.length.toLocaleString()} / {MAX_CHARS.toLocaleString()}</span>}
           <button type="submit" disabled={saving || demo} className="px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-white text-sm font-medium disabled:opacity-50">
             {saving ? "Indexing…" : "Add to knowledge base"}
           </button>
@@ -115,7 +152,7 @@ export default function ForgeClient({ documents, demo, semantic }: { documents: 
                   {doc.title}
                 </p>
                 <p className="text-xs text-[hsl(var(--foreground-muted))]">
-                  {subjectLabel(doc.subject)} · {doc.characters.toLocaleString()} characters · {doc.chunks} passages
+                  {subjectLabel(doc.subject)} · {doc.pages ? `PDF, ${doc.pages} pages · ` : ""}{doc.characters.toLocaleString()} characters · {doc.chunks} passages
                   {doc.embedded ? " · embedded" : ""} · {new Date(doc.createdAt).toLocaleDateString()}
                 </p>
               </div>
