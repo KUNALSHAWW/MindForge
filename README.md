@@ -477,7 +477,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 <div align="center">
   <br />
   <p>
-    <strong>Built with ❤️ by <a href="https://github.com/KUNALSHAWW">Kunal Shaw</a></strong>
+    <strong>Built by <a href="https://github.com/KUNALSHAWW">Kunal Shaw</a></strong>
   </p>
   <p>
     <a href="https://mindforge.vercel.app">Live Demo</a> •
